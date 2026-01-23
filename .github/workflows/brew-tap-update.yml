@@ -118,26 +118,42 @@ jobs:
           sha256 = os.environ["SHA256"]
 
           content = formula_path.read_text(encoding="utf-8")
-          content = re.sub(r'^\s*url\s+"[^"]+"', f'  url "{tarball_url}"', content, flags=re.M)
-          content = re.sub(r'^\s*sha256\s+"[^"]+"', f'  sha256 "{sha256}"', content, flags=re.M)
+          content = re.sub(r'^\s*\\1.*\n?', '', content, flags=re.M)
 
-          if re.search(r'^\s*version\s+"[^"]+"', content, flags=re.M):
-              content = re.sub(
-                  r'^\s*version\s+"[^"]+"',
-                  f'  version "{version}"',
-                  content,
-                  flags=re.M,
-              )
-          else:
-              lines = content.splitlines()
-              for index, line in enumerate(lines):
-                  if re.match(r'^\s*url\s+"[^"]+"', line):
-                      indent = re.match(r'^(\s*)', line).group(1)
-                      lines.insert(index + 1, f'{indent}version "{version}"')
-                      break
-              content = "\n".join(lines) + "\n"
+          lines = []
+          for line in content.splitlines():
+              if re.match(r'^\s*url\s+"[^"]+"', line):
+                  continue
+              if re.match(r'^\s*sha256\s+"[^"]+"', line):
+                  continue
+              if re.match(r'^\s*version\s+"[^"]+"', line):
+                  continue
+              lines.append(line)
 
-          formula_path.write_text(content, encoding="utf-8")
+          def find_index(pattern: str):
+              for idx, line in enumerate(lines):
+                  if re.match(pattern, line):
+                      return idx
+              return None
+
+          homepage_index = find_index(r'^\s*homepage\s+"[^"]+"')
+          desc_index = find_index(r'^\s*desc\s+"[^"]+"')
+
+          indent = "  "
+          if homepage_index is not None:
+              indent = re.match(r'^(\s*)', lines[homepage_index]).group(1)
+          elif desc_index is not None:
+              indent = re.match(r'^(\s*)', lines[desc_index]).group(1)
+
+          insert_at = homepage_index if homepage_index is not None else desc_index
+          if insert_at is None:
+              insert_at = 1
+
+          lines.insert(insert_at + 1, f'{indent}url "{tarball_url}"')
+          lines.insert(insert_at + 2, f'{indent}sha256 "{sha256}"')
+          lines.insert(insert_at + 3, f'{indent}version "{version}"')
+
+          formula_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
           git config user.email "actions@github.com"
