@@ -1,0 +1,43 @@
+title: "[Show & Tell] "
+labels:
+  - show-and-tell
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Show and Tell
+
+        Built something cool with iOS Simulator MCP? Share it with the community!
+
+  - type: textarea
+    id: project
+    attributes:
+      label: What You Built
+      description: Tell us about what you created
+      placeholder: I built...
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: How You Used iOS Simulator MCP
+      description: How did this project leverage iOS Simulator MCP?
+      placeholder: I used it to...
+
+  - type: textarea
+    id: links
+    attributes:
+      label: Links & Resources
+      description: Share any relevant links (repos, demos, articles)
+      placeholder: |
+        - Repository:
+        - Demo:
+        - Article:
+
+  - type: textarea
+    id: lessons
+    attributes:
+      label: Lessons Learned
+      description: Any tips or insights to share?
+      placeholder: What I learned...
