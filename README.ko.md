@@ -3,7 +3,6 @@
 </p>
 
 <p align="center"><a href="README.md">English README</a></p>
-<p align="center">최신 릴리즈: v1.0.0</p>
 
 <h1 align="center">iOS Simulator MCP</h1>
 
