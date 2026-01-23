@@ -120,7 +120,15 @@ jobs:
           content = formula_path.read_text(encoding="utf-8")
           content = re.sub(r'^\s*\\1.*\n?', '', content, flags=re.M)
 
-          lines = content.splitlines()
+          lines = []
+          for line in content.splitlines():
+              if re.match(r'^\s*url\s+"[^"]+"', line):
+                  continue
+              if re.match(r'^\s*sha256\s+"[^"]+"', line):
+                  continue
+              if re.match(r'^\s*version\s+"[^"]+"', line):
+                  continue
+              lines.append(line)
 
           def find_index(pattern: str):
               for idx, line in enumerate(lines):
@@ -130,9 +138,6 @@ jobs:
 
           homepage_index = find_index(r'^\s*homepage\s+"[^"]+"')
           desc_index = find_index(r'^\s*desc\s+"[^"]+"')
-          url_index = find_index(r'^\s*url\s+"[^"]+"')
-          sha_index = find_index(r'^\s*sha256\s+"[^"]+"')
-          version_index = find_index(r'^\s*version\s+"[^"]+"')
 
           indent = "  "
           if homepage_index is not None:
@@ -140,36 +145,13 @@ jobs:
           elif desc_index is not None:
               indent = re.match(r'^(\s*)', lines[desc_index]).group(1)
 
-          if url_index is None:
-              insert_at = homepage_index if homepage_index is not None else desc_index
-              if insert_at is None:
-                  insert_at = 1
-              lines.insert(insert_at + 1, f'{indent}url "{tarball_url}"')
-              lines.insert(insert_at + 2, f'{indent}sha256 "{sha256}"')
-              url_index = find_index(r'^\s*url\s+"[^"]+"')
-              sha_index = find_index(r'^\s*sha256\s+"[^"]+"')
-          else:
-              url_indent = re.match(r'^(\s*)', lines[url_index]).group(1)
-              lines[url_index] = f'{url_indent}url "{tarball_url}"'
-              if sha_index is not None:
-                  sha_indent = re.match(r'^(\s*)', lines[sha_index]).group(1)
-                  lines[sha_index] = f'{sha_indent}sha256 "{sha256}"'
-              else:
-                  lines.insert(url_index + 1, f'{url_indent}sha256 "{sha256}"')
-                  sha_index = url_index + 1
+          insert_at = homepage_index if homepage_index is not None else desc_index
+          if insert_at is None:
+              insert_at = 1
 
-          if version_index is not None:
-              version_indent = re.match(r'^(\s*)', lines[version_index]).group(1)
-              lines[version_index] = f'{version_indent}version "{version}"'
-          else:
-              if url_index is None:
-                  url_index = find_index(r'^\s*url\s+"[^"]+"')
-              version_indent = indent
-              if url_index is not None:
-                  version_indent = re.match(r'^(\s*)', lines[url_index]).group(1)
-                  lines.insert(url_index + 1, f'{version_indent}version "{version}"')
-              else:
-                  lines.insert(1, f'{version_indent}version "{version}"')
+          lines.insert(insert_at + 1, f'{indent}url "{tarball_url}"')
+          lines.insert(insert_at + 2, f'{indent}sha256 "{sha256}"')
+          lines.insert(insert_at + 3, f'{indent}version "{version}"')
 
           formula_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
