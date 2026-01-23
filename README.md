@@ -3,6 +3,7 @@
 </p>
 
 <p align="center"><a href="README.ko.md">한국어 README</a></p>
+<p align="center">Latest release: v1.0.0</p>
 
 <h1 align="center">iOS Simulator MCP</h1>
 
