@@ -1,0 +1,145 @@
+name: Update Homebrew Tap
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  update-brew-tap:
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Guard actor
+        env:
+          BREW_TAP_ALLOWED_ACTORS: ${{ vars.BREW_TAP_ALLOWED_ACTORS }}
+        run: |
+          set -euo pipefail
+          ALLOWED="${BREW_TAP_ALLOWED_ACTORS:-DAWNCR0W}"
+          IFS=',' read -r -a allowed <<< "$ALLOWED"
+          for actor in "${allowed[@]}"; do
+            actor_trimmed="$(echo "$actor" | xargs)"
+            if [ "$GITHUB_ACTOR" = "$actor_trimmed" ]; then
+              exit 0
+            fi
+          done
+          echo "Actor ${GITHUB_ACTOR} is not allowed to update the Homebrew tap."
+          exit 1
+
+      - name: Validate configuration
+        env:
+          BREW_TAP_TOKEN: ${{ secrets.BREW_TAP_TOKEN }}
+          BREW_TAP_REPO: ${{ vars.BREW_TAP_REPO }}
+        run: |
+          if [ -z "$BREW_TAP_TOKEN" ]; then
+            echo "Missing secrets.BREW_TAP_TOKEN"
+            exit 1
+          fi
+          if [ -z "$BREW_TAP_REPO" ]; then
+            echo "Missing vars.BREW_TAP_REPO (e.g., owner/homebrew-ios-simulator-mcp)"
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Tag release
+        env:
+          RELEASE_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_REF#release/}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Invalid release version: $VERSION"
+            exit 1
+          fi
+          TAG_NAME="v${VERSION}"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists."
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name "github-actions"
+          git tag -a "$TAG_NAME" -m "Release ${VERSION}"
+          git push origin "$TAG_NAME"
+
+      - name: Update tap formula
+        env:
+          BREW_TAP_TOKEN: ${{ secrets.BREW_TAP_TOKEN }}
+          BREW_TAP_REPO: ${{ vars.BREW_TAP_REPO }}
+          BREW_TAP_FORMULA_PATH: ${{ vars.BREW_TAP_FORMULA_PATH }}
+          RELEASE_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${RELEASE_REF#release/}"
+          TAG_NAME="v${VERSION}"
+          TARBALL_URL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG_NAME}.tar.gz"
+          SHA256=""
+          for _ in 1 2 3 4 5; do
+            SHA256="$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')"
+            if [ -n "$SHA256" ]; then
+              break
+            fi
+            sleep 3
+          done
+          if [ -z "$SHA256" ]; then
+            echo "Failed to download tarball for ${TAG_NAME}"
+            exit 1
+          fi
+          export TAG_NAME VERSION TARBALL_URL SHA256
+
+          git clone "https://x-access-token:${BREW_TAP_TOKEN}@github.com/${BREW_TAP_REPO}.git" tap
+          cd tap
+
+          FORMULA_PATH="${BREW_TAP_FORMULA_PATH:-Formula/ios-simulator-mcp.rb}"
+          export FORMULA_PATH
+          if [ ! -f "$FORMULA_PATH" ]; then
+            echo "Formula not found at $FORMULA_PATH"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          formula_path = Path(os.environ["FORMULA_PATH"])
+          version = os.environ["VERSION"]
+          tarball_url = os.environ["TARBALL_URL"]
+          sha256 = os.environ["SHA256"]
+
+          content = formula_path.read_text(encoding="utf-8")
+          content = re.sub(r'^\s*url\s+"[^"]+"', f'  url "{tarball_url}"', content, flags=re.M)
+          content = re.sub(r'^\s*sha256\s+"[^"]+"', f'  sha256 "{sha256}"', content, flags=re.M)
+
+          if re.search(r'^\s*version\s+"[^"]+"', content, flags=re.M):
+              content = re.sub(r'^\s*version\s+"[^"]+"', f'  version "{version}"', content, flags=re.M)
+          else:
+              content = re.sub(
+                  r'(^\s*url\s+"[^"]+"\s*$)',
+                  r'\\1\\n  version "' + version + '"',
+                  content,
+                  flags=re.M,
+              )
+
+          formula_path.write_text(content, encoding="utf-8")
+          PY
+
+          git config user.email "actions@github.com"
+          git config user.name "github-actions"
+          git add "$FORMULA_PATH"
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: Update ios-simulator-mcp ${VERSION}"
+          git push

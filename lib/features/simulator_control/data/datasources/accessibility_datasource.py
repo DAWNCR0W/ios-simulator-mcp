@@ -1,0 +1,1411 @@
+"""Datasource for interacting with macOS Accessibility API."""
+
+import logging
+import os
+import re
+import time
+from typing import List, Optional
+
+from lib.core.constants.app_constants import (
+    DEFAULT_GRID_STEP,
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_MAX_GRID_POINTS,
+)
+from lib.core.errors.app_errors import AccessibilityPermissionError, SimulatorNotRunningError
+from lib.core.utils.result import Result
+from lib.features.simulator_control.data.models.ui_element_model import UiElementModel
+from lib.features.simulator_control.data.models.ui_frame_model import UiFrameModel
+from lib.features.simulator_control.data.datasources.simulator_process_datasource import (
+    SimulatorProcessDatasource,
+)
+
+
+class AccessibilityDatasource:
+    """Reads and manipulates UI elements via Accessibility APIs."""
+
+    # Default timeouts and retry settings
+    DEFAULT_TIMEOUT = 10.0
+    DEFAULT_POLL_INTERVAL = 0.5
+    DEFAULT_RETRY_COUNT = 3
+
+    def __init__(self, process_datasource: SimulatorProcessDatasource) -> None:
+        self._process_datasource = process_datasource
+        self._logger = logging.getLogger(self.__class__.__name__)
+        self._grid_step = int(os.getenv("IOS_SIM_GRID_STEP", str(DEFAULT_GRID_STEP)))
+        self._max_depth = int(os.getenv("IOS_SIM_MAX_DEPTH", str(DEFAULT_MAX_DEPTH)))
+        self._max_grid_points = DEFAULT_MAX_GRID_POINTS
+        self._element_counter = 0
+
+    def get_ui_tree(self) -> UiElementModel:
+        """Return the UI tree as a data model."""
+        self._ensure_accessibility_permission()
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        self._element_counter = 0
+        visited = set()
+        return self._build_tree(app_element, window_element, visited, 0)
+
+    def tap_element(self, identifier: str) -> Result[None]:
+        """Press a UI element by identifier or label."""
+        self._ensure_accessibility_permission()
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        target = self._find_element(app_element, window_element, identifier)
+        if target is None:
+            return Result.failure(f"Element not found: {identifier}")
+        if not self._perform_press(target):
+            return Result.failure(f"Press action failed: {identifier}")
+        return Result.success(message="Tapped element")
+
+    def tap_coordinates(self, x: float, y: float) -> Result[None]:
+        """Tap an absolute screen coordinate within the simulator window."""
+        self._ensure_accessibility_permission()
+        app_element, _ = self._process_datasource.get_simulator_window()
+        element = self._element_at_position(app_element, x, y)
+        if element is not None and self._perform_press(element):
+            return Result.success(message="Tapped coordinates via AXPress")
+        self._mouse_click(x, y)
+        return Result.success(message="Tapped coordinates via mouse event")
+
+    def input_text(self, identifier: str, text: str) -> Result[None]:
+        """Input text into a UI element by identifier or label."""
+        self._ensure_accessibility_permission()
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        target = self._find_element(app_element, window_element, identifier)
+        if target is None:
+            return Result.failure(f"Element not found: {identifier}")
+        self._focus_element(target)
+        if self._set_value_attribute(target, text):
+            return Result.success(message="Text input applied via AXValue")
+        self._type_text(text)
+        return Result.success(message="Text input applied via keyboard events")
+
+    def handle_permission_alert(self, action: str) -> Result[None]:
+        """Handle a permission alert by tapping allow/deny style buttons."""
+        self._ensure_accessibility_permission()
+        action_lower = action.lower().strip()
+        if action_lower not in {"allow", "deny"}:
+            return Result.failure("Action must be 'allow' or 'deny'.")
+
+        for attempt in range(self.DEFAULT_RETRY_COUNT + 1):
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            alert_root = self._find_alert_container(window_element, app_element)
+            if alert_root is None:
+                if attempt == 0:
+                    return Result.failure("No alert detected.")
+                return Result.success(message="Alert dismissed")
+
+            buttons = self._find_buttons(alert_root, app_element)
+            tapped = False
+            if buttons:
+                selected = self._select_alert_button(buttons, action_lower)
+                if selected is not None:
+                    tapped = self._perform_press(selected["element"])
+                if not tapped:
+                    tapped = self._tap_alert_by_coordinates(
+                        app_element, window_element, action_lower
+                    )
+            else:
+                tapped = self._tap_alert_by_coordinates(
+                    app_element, window_element, action_lower
+                )
+
+            if not tapped:
+                return Result.failure("Failed to press alert button.")
+            time.sleep(0.2)
+
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        if self._find_alert_container(window_element, app_element) is None:
+            return Result.success(message="Alert dismissed")
+        return Result.failure("Alert still visible after retries.")
+
+    def set_target_window_title(self, title_substring: Optional[str]) -> Result[dict]:
+        """Set the simulator window title substring to target for UI operations."""
+        self._ensure_accessibility_permission()
+        normalized = title_substring.strip() if title_substring else ""
+        previous = self._process_datasource.get_target_window_title()
+        self._process_datasource.set_target_window_title(normalized or None)
+        if not normalized:
+            return Result.success(
+                data={"title_contains": None},
+                message="Target window cleared",
+            )
+        try:
+            self._process_datasource.get_simulator_window()
+        except SimulatorNotRunningError as error:
+            self._process_datasource.set_target_window_title(previous)
+            return Result.failure(str(error))
+        return Result.success(
+            data={"title_contains": normalized},
+            message="Target window set",
+        )
+
+    def _ensure_accessibility_permission(self) -> None:
+        try:
+            from Quartz import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+        except ImportError:
+            from ApplicationServices import (
+                AXIsProcessTrustedWithOptions,
+                kAXTrustedCheckOptionPrompt,
+            )
+
+        options = {kAXTrustedCheckOptionPrompt: True}
+        if not AXIsProcessTrustedWithOptions(options):
+            raise AccessibilityPermissionError(
+                "Accessibility permission is required. Enable it in System Settings."
+            )
+
+    def _build_tree(self, app_element, element, visited: set, depth: int) -> UiElementModel:
+        if depth > self._max_depth:
+            self._logger.warning("Max depth reached at %s", depth)
+            return self._create_model(element, [])
+
+        element_key = id(element)
+        if element_key in visited:
+            return self._create_model(element, [])
+        visited.add(element_key)
+
+        children = self._get_children(element)
+        if not children and self._get_role(element) == "AXGroup":
+            frame = self._get_frame(element)
+            if frame is not None:
+                children = self._grid_scan_children(app_element, element, frame)
+
+        child_models: List[UiElementModel] = []
+        for child in children:
+            child_models.append(self._build_tree(app_element, child, visited, depth + 1))
+
+        return self._create_model(element, child_models)
+
+    def _create_model(
+        self, element, children: List[UiElementModel]
+    ) -> UiElementModel:
+        self._element_counter += 1
+        frame = self._get_frame(element)
+        frame_model = (
+            UiFrameModel(
+                x=frame[0],
+                y=frame[1],
+                width=frame[2],
+                height=frame[3],
+            )
+            if frame
+            else None
+        )
+        return UiElementModel(
+            element_id=self._element_counter,
+            role=self._get_role(element) or "Unknown",
+            title=self._get_title(element),
+            label=self._get_label(element),
+            identifier=self._get_identifier(element),
+            value=self._get_value(element),
+            frame=frame_model,
+            children=children,
+        )
+
+    def _find_element(self, app_element, root_element, identifier: str):
+        queue = [root_element]
+        visited = set()
+        while queue:
+            current = queue.pop(0)
+            element_key = id(current)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+
+            if self._matches_identifier(current, identifier):
+                return current
+
+            children = self._get_children(current)
+            if not children and self._get_role(current) == "AXGroup":
+                frame = self._get_frame(current)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, current, frame)
+            queue.extend(children)
+        return None
+
+    def _matches_identifier(self, element, identifier: str) -> bool:
+        candidate_values = [
+            self._get_identifier(element),
+            self._get_label(element),
+            self._get_title(element),
+            self._get_value(element),
+        ]
+        identifier_lower = identifier.lower()
+        for value in candidate_values:
+            if value and identifier_lower in value.lower():
+                return True
+        return False
+
+    def _get_children(self, element) -> list:
+        try:
+            from Quartz import (
+                AXUIElementCopyAttributeValue,
+                kAXChildrenAttribute,
+                kAXErrorSuccess,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                kAXChildrenAttribute,
+                kAXErrorSuccess,
+            )
+
+        error, value = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, None)
+        if error != kAXErrorSuccess or value is None:
+            return []
+        return list(value)
+
+    def _get_role(self, element) -> Optional[str]:
+        return self._get_string_attribute(element, "AXRole")
+
+    def _get_title(self, element) -> Optional[str]:
+        return self._get_string_attribute(element, "AXTitle")
+
+    def _get_label(self, element) -> Optional[str]:
+        return self._get_string_attribute(element, "AXLabel")
+
+    def _get_identifier(self, element) -> Optional[str]:
+        return self._get_string_attribute(element, "AXIdentifier")
+
+    def _get_subrole(self, element) -> Optional[str]:
+        return self._get_string_attribute(element, "AXSubrole")
+
+    def _get_value(self, element) -> Optional[str]:
+        value = self._get_attribute(element, "AXValue")
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return None
+        return str(value)
+
+    def _get_frame(self, element) -> Optional[tuple[float, float, float, float]]:
+        try:
+            from Quartz import AXValueGetValue, kAXValueCGRectType
+        except ImportError:
+            from ApplicationServices import AXValueGetValue, kAXValueCGRectType
+
+        ax_value = self._get_attribute(element, "AXFrame")
+        if ax_value is None:
+            return None
+        try:
+            try:
+                from Quartz import CGRect
+            except ImportError:
+                from ApplicationServices import CGRect
+
+            rect = CGRect()
+            if AXValueGetValue(ax_value, kAXValueCGRectType, rect):
+                return (rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
+        except Exception as error:
+            self._logger.debug("AXValueGetValue failed: %s", error)
+
+        parsed = self._parse_frame_from_axvalue(ax_value)
+        if parsed is not None:
+            return parsed
+        return None
+
+    def _parse_frame_from_axvalue(self, ax_value) -> Optional[tuple[float, float, float, float]]:
+        text = str(ax_value)
+        match = re.search(
+            r"x:(-?\d+(?:\.\d+)?)\s+y:(-?\d+(?:\.\d+)?)\s+w:(-?\d+(?:\.\d+)?)\s+h:(-?\d+(?:\.\d+)?)",
+            text,
+        )
+        if not match:
+            return None
+        return tuple(float(value) for value in match.groups())
+
+    def _get_string_attribute(self, element, attribute: str) -> Optional[str]:
+        value = self._get_attribute(element, attribute)
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return str(value)
+
+    def _get_attribute(self, element, attribute: str):
+        try:
+            from Quartz import AXUIElementCopyAttributeValue, kAXErrorSuccess
+        except ImportError:
+            from ApplicationServices import AXUIElementCopyAttributeValue, kAXErrorSuccess
+
+        error, value = AXUIElementCopyAttributeValue(element, attribute, None)
+        if error != kAXErrorSuccess:
+            return None
+        return value
+
+    def _grid_scan_children(self, app_element, parent_element, frame) -> list:
+        width = max(frame[2], 0)
+        height = max(frame[3], 0)
+        if width == 0 or height == 0:
+            return []
+
+        step = max(self._grid_step, 5)
+        max_points = self._max_grid_points
+        points_scanned = 0
+        children = []
+        signatures = set()
+
+        x = frame[0]
+        while x <= frame[0] + width and points_scanned < max_points:
+            y = frame[1]
+            while y <= frame[1] + height and points_scanned < max_points:
+                element = self._element_at_position(app_element, x, y)
+                points_scanned += 1
+                if element is not None and element is not parent_element:
+                    signature = self._element_signature(element)
+                    if signature not in signatures:
+                        signatures.add(signature)
+                        children.append(element)
+                y += step
+            x += step
+        return children
+
+    def _element_at_position(self, app_element, x: float, y: float):
+        try:
+            from Quartz import AXUIElementCopyElementAtPosition, kAXErrorSuccess
+        except ImportError:
+            from ApplicationServices import AXUIElementCopyElementAtPosition, kAXErrorSuccess
+
+        error, element = AXUIElementCopyElementAtPosition(app_element, x, y, None)
+        if error != kAXErrorSuccess:
+            return None
+        return element
+
+    def _element_signature(self, element) -> str:
+        role = self._get_role(element) or ""
+        identifier = self._get_identifier(element) or ""
+        label = self._get_label(element) or ""
+        title = self._get_title(element) or ""
+        frame = self._get_frame(element)
+        frame_key = "" if frame is None else f"{frame[0]}:{frame[1]}:{frame[2]}:{frame[3]}"
+        return f"{role}|{identifier}|{label}|{title}|{frame_key}"
+
+    def _perform_press(self, element) -> bool:
+        try:
+            from Quartz import (
+                AXUIElementCopyActionNames,
+                AXUIElementPerformAction,
+                kAXErrorSuccess,
+                kAXPressAction,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                AXUIElementCopyActionNames,
+                AXUIElementPerformAction,
+                kAXErrorSuccess,
+                kAXPressAction,
+            )
+
+        error, actions = AXUIElementCopyActionNames(element, None)
+        if error != kAXErrorSuccess:
+            return False
+        if kAXPressAction not in actions:
+            return False
+        result = AXUIElementPerformAction(element, kAXPressAction)
+        return result == kAXErrorSuccess
+
+    def _focus_element(self, element) -> None:
+        try:
+            from Quartz import AXUIElementPerformAction, kAXPressAction
+        except ImportError:
+            from ApplicationServices import AXUIElementPerformAction, kAXPressAction
+
+        try:
+            AXUIElementPerformAction(element, kAXPressAction)
+        except Exception:
+            self._logger.debug("Press action failed while focusing element")
+
+    def _set_value_attribute(self, element, text: str) -> bool:
+        try:
+            from Quartz import AXUIElementSetAttributeValue, kAXErrorSuccess
+        except ImportError:
+            from ApplicationServices import AXUIElementSetAttributeValue, kAXErrorSuccess
+
+        result = AXUIElementSetAttributeValue(element, "AXValue", text)
+        return result == kAXErrorSuccess
+
+    def _type_text(self, text: str) -> None:
+        try:
+            from Quartz import (
+                CGEventCreateKeyboardEvent,
+                CGEventKeyboardSetUnicodeString,
+                CGEventPost,
+                kCGHIDEventTap,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                CGEventCreateKeyboardEvent,
+                CGEventKeyboardSetUnicodeString,
+                CGEventPost,
+                kCGHIDEventTap,
+            )
+
+        for character in text:
+            key_down = CGEventCreateKeyboardEvent(None, 0, True)
+            CGEventKeyboardSetUnicodeString(key_down, len(character), character)
+            CGEventPost(kCGHIDEventTap, key_down)
+            key_up = CGEventCreateKeyboardEvent(None, 0, False)
+            CGEventKeyboardSetUnicodeString(key_up, len(character), character)
+            CGEventPost(kCGHIDEventTap, key_up)
+            time.sleep(0.01)
+
+    def _find_alert_container(self, root_element, app_element):
+        queue = [root_element]
+        visited = set()
+        while queue:
+            element = queue.pop(0)
+            element_key = id(element)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+            role = self._get_role(element) or ""
+            subrole = self._get_subrole(element) or ""
+            if role in {"AXAlert", "AXDialog", "AXSheet"} or subrole in {
+                "AXDialog",
+                "AXSystemDialog",
+            }:
+                return element
+            children = self._get_children(element)
+            if not children and role == "AXGroup":
+                frame = self._get_frame(element)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, element, frame)
+            queue.extend(children)
+        return None
+
+    def _find_buttons(self, root_element, app_element) -> list[dict]:
+        queue = [root_element]
+        visited = set()
+        buttons = []
+        while queue:
+            element = queue.pop(0)
+            element_key = id(element)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+            role = self._get_role(element) or ""
+            if role == "AXButton":
+                buttons.append(
+                    {
+                        "element": element,
+                        "title": self._get_title(element),
+                        "label": self._get_label(element),
+                        "identifier": self._get_identifier(element),
+                        "value": self._get_value(element),
+                        "frame": self._get_frame(element),
+                    }
+                )
+            children = self._get_children(element)
+            if not children and role == "AXGroup":
+                frame = self._get_frame(element)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, element, frame)
+            queue.extend(children)
+        return buttons
+
+    def _select_alert_button(self, buttons: list[dict], action: str) -> Optional[dict]:
+        allow_labels = {
+            "allow",
+            "ok",
+            "확인",
+            "허용",
+            "always allow",
+            "allow once",
+            "allow while using app",
+            "allow while using the app",
+        }
+        deny_labels = {
+            "don't allow",
+            "don’t allow",
+            "deny",
+            "not now",
+            "later",
+            "취소",
+            "허용 안 함",
+            "허용하지 않음",
+        }
+        labels = allow_labels if action == "allow" else deny_labels
+
+        def normalized_text(button: dict) -> str:
+            for key in ("title", "label", "value", "identifier"):
+                value = button.get(key)
+                if value:
+                    return str(value).strip().lower()
+            return ""
+
+        for button in buttons:
+            text = normalized_text(button)
+            if text in labels:
+                return button
+
+        # Fallback: choose by x position (rightmost for allow, leftmost for deny)
+        framed = [btn for btn in buttons if btn.get("frame") is not None]
+        if framed:
+            framed.sort(key=lambda btn: btn["frame"][0])
+            return framed[-1] if action == "allow" else framed[0]
+        return buttons[0] if action == "allow" else buttons[-1]
+
+    def _tap_alert_by_coordinates(
+        self, app_element, window_element, action: str
+    ) -> bool:
+        content_frame = self._get_largest_group_frame(window_element)
+        if content_frame is None:
+            return False
+        x_ratios = [0.72, 0.78] if action == "allow" else [0.28, 0.22]
+        y_ratios = [0.62, 0.68, 0.72, 0.76]
+
+        for x_ratio in x_ratios:
+            for y_ratio in y_ratios:
+                x = content_frame[0] + content_frame[2] * x_ratio
+                y = content_frame[1] + content_frame[3] * y_ratio
+
+                element = self._element_at_position(app_element, x, y)
+                if element is not None and self._perform_press(element):
+                    return True
+                self._mouse_click(x, y)
+                time.sleep(0.05)
+
+        return True
+
+    def _get_largest_group_frame(
+        self, window_element
+    ) -> Optional[tuple[float, float, float, float]]:
+        queue = [window_element]
+        visited = set()
+        best = None
+        while queue:
+            element = queue.pop(0)
+            element_key = id(element)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+            role = self._get_role(element)
+            frame = self._get_frame(element)
+            if role == "AXGroup" and frame:
+                if best is None or (frame[2] * frame[3]) > (best[2] * best[3]):
+                    best = frame
+            children = self._get_children(element)
+            queue.extend(children)
+        return best
+
+    def _mouse_click(self, x: float, y: float) -> None:
+        try:
+            from ApplicationServices import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+        except ImportError:
+            from Quartz import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+
+        point = CGPoint(x, y)
+        down = CGEventCreateMouseEvent(None, kCGEventLeftMouseDown, point, kCGMouseButtonLeft)
+        up = CGEventCreateMouseEvent(None, kCGEventLeftMouseUp, point, kCGMouseButtonLeft)
+        CGEventPost(kCGHIDEventTap, down)
+        CGEventPost(kCGHIDEventTap, up)
+
+    # =========================================================================
+    # WAIT UTILITIES
+    # =========================================================================
+
+    def wait_for_element(
+        self, identifier: str, timeout: float = DEFAULT_TIMEOUT
+    ) -> Result[dict]:
+        """Wait for an element to appear on screen.
+
+        Args:
+            identifier: Element identifier, label, or text to find
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            Result with element info if found, failure if timeout
+        """
+        self._ensure_accessibility_permission()
+        start_time = time.time()
+        poll_interval = self.DEFAULT_POLL_INTERVAL
+
+        while time.time() - start_time < timeout:
+            try:
+                app_element, window_element = self._process_datasource.get_simulator_window()
+                element = self._find_element(app_element, window_element, identifier)
+                if element is not None:
+                    element_info = self._get_element_info(element)
+                    return Result.success(
+                        data=element_info,
+                        message=f"Element found: {identifier}"
+                    )
+            except Exception as error:
+                self._logger.debug("Error during wait_for_element: %s", error)
+            time.sleep(poll_interval)
+
+        return Result.failure(f"Timeout waiting for element: {identifier} (after {timeout}s)")
+
+    def wait_for_element_gone(
+        self, identifier: str, timeout: float = DEFAULT_TIMEOUT
+    ) -> Result[None]:
+        """Wait for an element to disappear from screen.
+
+        Args:
+            identifier: Element identifier, label, or text
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            Result success if element gone, failure if timeout
+        """
+        self._ensure_accessibility_permission()
+        start_time = time.time()
+        poll_interval = self.DEFAULT_POLL_INTERVAL
+
+        while time.time() - start_time < timeout:
+            try:
+                app_element, window_element = self._process_datasource.get_simulator_window()
+                element = self._find_element(app_element, window_element, identifier)
+                if element is None:
+                    return Result.success(message=f"Element gone: {identifier}")
+            except Exception as error:
+                self._logger.debug("Error during wait_for_element_gone: %s", error)
+            time.sleep(poll_interval)
+
+        return Result.failure(f"Timeout waiting for element to disappear: {identifier} (after {timeout}s)")
+
+    def wait_for_text(
+        self, text: str, timeout: float = DEFAULT_TIMEOUT
+    ) -> Result[dict]:
+        """Wait for specific text to appear anywhere on screen.
+
+        Args:
+            text: Text to search for
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            Result with element info containing the text if found
+        """
+        self._ensure_accessibility_permission()
+        start_time = time.time()
+        poll_interval = self.DEFAULT_POLL_INTERVAL
+
+        while time.time() - start_time < timeout:
+            try:
+                app_element, window_element = self._process_datasource.get_simulator_window()
+                element = self._find_element_by_text(app_element, window_element, text)
+                if element is not None:
+                    element_info = self._get_element_info(element)
+                    return Result.success(
+                        data=element_info,
+                        message=f"Text found: {text}"
+                    )
+            except Exception as error:
+                self._logger.debug("Error during wait_for_text: %s", error)
+            time.sleep(poll_interval)
+
+        return Result.failure(f"Timeout waiting for text: {text} (after {timeout}s)")
+
+    def _find_element_by_text(self, app_element, root_element, text: str):
+        """Find element containing exact text match."""
+        text_lower = text.lower()
+        queue = [root_element]
+        visited = set()
+
+        while queue:
+            current = queue.pop(0)
+            element_key = id(current)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+
+            # Check all text-containing attributes
+            for attr_value in [
+                self._get_value(current),
+                self._get_label(current),
+                self._get_title(current),
+            ]:
+                if attr_value and text_lower in attr_value.lower():
+                    return current
+
+            children = self._get_children(current)
+            if not children and self._get_role(current) == "AXGroup":
+                frame = self._get_frame(current)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, current, frame)
+            queue.extend(children)
+
+        return None
+
+    def _get_element_info(self, element) -> dict:
+        """Extract element info as a dictionary."""
+        frame = self._get_frame(element)
+        return {
+            "role": self._get_role(element),
+            "identifier": self._get_identifier(element),
+            "label": self._get_label(element),
+            "title": self._get_title(element),
+            "value": self._get_value(element),
+            "frame": {
+                "x": frame[0],
+                "y": frame[1],
+                "width": frame[2],
+                "height": frame[3],
+            } if frame else None,
+        }
+
+    # =========================================================================
+    # ELEMENT STATE CHECKS
+    # =========================================================================
+
+    def is_element_visible(self, identifier: str) -> Result[bool]:
+        """Check if an element is visible on screen.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result with True if visible, False if not found or not visible
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+            if element is None:
+                return Result.success(data=False, message="Element not found")
+
+            frame = self._get_frame(element)
+            if frame is None:
+                return Result.success(data=False, message="Element has no frame")
+
+            # Check if element has positive dimensions and is on screen
+            is_visible = frame[2] > 0 and frame[3] > 0 and frame[0] >= 0 and frame[1] >= 0
+            return Result.success(data=is_visible, message=f"Visibility: {is_visible}")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def is_element_enabled(self, identifier: str) -> Result[bool]:
+        """Check if an element is enabled (not disabled).
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result with True if enabled, False if disabled or not found
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+            if element is None:
+                return Result.success(data=False, message="Element not found")
+
+            # Check AXEnabled attribute
+            enabled = self._get_attribute(element, "AXEnabled")
+            if enabled is None:
+                # If no AXEnabled attribute, assume enabled
+                return Result.success(data=True, message="Element enabled (no AXEnabled attr)")
+
+            return Result.success(data=bool(enabled), message=f"Enabled: {enabled}")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def get_element_text(self, identifier: str) -> Result[str]:
+        """Get the text content of an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result with element's text content
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+            if element is None:
+                return Result.failure(f"Element not found: {identifier}")
+
+            # Try different text sources in priority order
+            text = (
+                self._get_value(element) or
+                self._get_label(element) or
+                self._get_title(element) or
+                ""
+            )
+            return Result.success(data=text, message="Text retrieved")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def get_element_attribute(self, identifier: str, attribute: str) -> Result:
+        """Get a specific attribute value from an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+            attribute: Accessibility attribute name (e.g., 'AXRole', 'AXValue')
+
+        Returns:
+            Result with attribute value
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+            if element is None:
+                return Result.failure(f"Element not found: {identifier}")
+
+            value = self._get_attribute(element, attribute)
+            if value is None:
+                return Result.success(data=None, message=f"Attribute {attribute} not found")
+
+            # Convert to serializable format
+            if isinstance(value, (str, int, float, bool)):
+                return Result.success(data=value, message=f"Attribute {attribute} retrieved")
+            return Result.success(data=str(value), message=f"Attribute {attribute} retrieved")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def get_element_count(self, identifier: str) -> Result[int]:
+        """Count elements matching the identifier.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result with count of matching elements
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            count = self._count_matching_elements(app_element, window_element, identifier)
+            return Result.success(data=count, message=f"Found {count} matching elements")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def _count_matching_elements(self, app_element, root_element, identifier: str) -> int:
+        """Count all elements matching the identifier."""
+        queue = [root_element]
+        visited = set()
+        count = 0
+
+        while queue:
+            current = queue.pop(0)
+            element_key = id(current)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+
+            if self._matches_identifier(current, identifier):
+                count += 1
+
+            children = self._get_children(current)
+            if not children and self._get_role(current) == "AXGroup":
+                frame = self._get_frame(current)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, current, frame)
+            queue.extend(children)
+
+        return count
+
+    # =========================================================================
+    # GESTURE SUPPORT
+    # =========================================================================
+
+    def swipe(
+        self,
+        direction: str,
+        start_x: Optional[float] = None,
+        start_y: Optional[float] = None,
+        distance: float = 300.0,
+        duration: float = 0.3,
+    ) -> Result[None]:
+        """Perform a swipe gesture.
+
+        Args:
+            direction: 'up', 'down', 'left', or 'right'
+            start_x: Starting X coordinate (defaults to center)
+            start_y: Starting Y coordinate (defaults to center)
+            distance: Swipe distance in pixels
+            duration: Swipe duration in seconds
+
+        Returns:
+            Result indicating success or failure
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            window_frame = self._get_frame(window_element)
+
+            if window_frame is None:
+                return Result.failure("Could not get simulator window frame")
+
+            # Default to center of window
+            center_x = window_frame[0] + window_frame[2] / 2
+            center_y = window_frame[1] + window_frame[3] / 2
+
+            sx = start_x if start_x is not None else center_x
+            sy = start_y if start_y is not None else center_y
+
+            # Calculate end coordinates based on direction
+            direction_lower = direction.lower()
+            if direction_lower == "up":
+                ex, ey = sx, sy - distance
+            elif direction_lower == "down":
+                ex, ey = sx, sy + distance
+            elif direction_lower == "left":
+                ex, ey = sx - distance, sy
+            elif direction_lower == "right":
+                ex, ey = sx + distance, sy
+            else:
+                return Result.failure(f"Invalid direction: {direction}. Use 'up', 'down', 'left', or 'right'")
+
+            self._perform_drag(sx, sy, ex, ey, duration)
+            return Result.success(message=f"Swiped {direction}")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def scroll_to_element(
+        self,
+        identifier: str,
+        max_scrolls: int = 10,
+        direction: str = "down",
+    ) -> Result[dict]:
+        """Scroll until an element becomes visible.
+
+        Args:
+            identifier: Element identifier to scroll to
+            max_scrolls: Maximum number of scroll attempts
+            direction: Scroll direction ('up' or 'down')
+
+        Returns:
+            Result with element info if found
+        """
+        self._ensure_accessibility_permission()
+
+        for i in range(max_scrolls):
+            try:
+                app_element, window_element = self._process_datasource.get_simulator_window()
+                element = self._find_element(app_element, window_element, identifier)
+
+                if element is not None:
+                    element_info = self._get_element_info(element)
+                    return Result.success(
+                        data=element_info,
+                        message=f"Element found after {i} scrolls"
+                    )
+
+                # Scroll in the specified direction
+                scroll_result = self.swipe(
+                    direction="up" if direction == "down" else "down",
+                    distance=250.0
+                )
+                if not scroll_result.is_success:
+                    return Result.failure(f"Scroll failed: {scroll_result.message}")
+
+                time.sleep(0.3)  # Wait for scroll animation
+            except Exception as error:
+                self._logger.debug("Error during scroll_to_element: %s", error)
+
+        return Result.failure(f"Element not found after {max_scrolls} scrolls: {identifier}")
+
+    def long_press(
+        self,
+        identifier: str,
+        duration: float = 1.0,
+    ) -> Result[None]:
+        """Perform a long press on an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+            duration: Press duration in seconds
+
+        Returns:
+            Result indicating success or failure
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+
+            if element is None:
+                return Result.failure(f"Element not found: {identifier}")
+
+            frame = self._get_frame(element)
+            if frame is None:
+                return Result.failure(f"Element has no frame: {identifier}")
+
+            # Calculate center of element
+            x = frame[0] + frame[2] / 2
+            y = frame[1] + frame[3] / 2
+
+            self._perform_long_press(x, y, duration)
+            return Result.success(message=f"Long pressed: {identifier}")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def long_press_coordinates(
+        self,
+        x: float,
+        y: float,
+        duration: float = 1.0,
+    ) -> Result[None]:
+        """Perform a long press at specific coordinates.
+
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            duration: Press duration in seconds
+
+        Returns:
+            Result indicating success or failure
+        """
+        self._ensure_accessibility_permission()
+        try:
+            self._perform_long_press(x, y, duration)
+            return Result.success(message=f"Long pressed at ({x}, {y})")
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def _perform_drag(
+        self,
+        start_x: float,
+        start_y: float,
+        end_x: float,
+        end_y: float,
+        duration: float = 0.3,
+    ) -> None:
+        """Perform a drag gesture from start to end coordinates."""
+        try:
+            from Quartz import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseDragged,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseDragged,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+
+        steps = max(int(duration * 60), 10)  # 60 steps per second
+        dx = (end_x - start_x) / steps
+        dy = (end_y - start_y) / steps
+        sleep_time = duration / steps
+
+        # Mouse down at start
+        start_point = CGPoint(start_x, start_y)
+        down_event = CGEventCreateMouseEvent(
+            None, kCGEventLeftMouseDown, start_point, kCGMouseButtonLeft
+        )
+        CGEventPost(kCGHIDEventTap, down_event)
+
+        # Drag to end
+        for i in range(1, steps + 1):
+            current_x = start_x + dx * i
+            current_y = start_y + dy * i
+            current_point = CGPoint(current_x, current_y)
+            drag_event = CGEventCreateMouseEvent(
+                None, kCGEventLeftMouseDragged, current_point, kCGMouseButtonLeft
+            )
+            CGEventPost(kCGHIDEventTap, drag_event)
+            time.sleep(sleep_time)
+
+        # Mouse up at end
+        end_point = CGPoint(end_x, end_y)
+        up_event = CGEventCreateMouseEvent(
+            None, kCGEventLeftMouseUp, end_point, kCGMouseButtonLeft
+        )
+        CGEventPost(kCGHIDEventTap, up_event)
+
+    def _perform_long_press(self, x: float, y: float, duration: float) -> None:
+        """Perform a long press at coordinates."""
+        try:
+            from Quartz import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                CGEventCreateMouseEvent,
+                CGEventPost,
+                CGPoint,
+                kCGEventLeftMouseDown,
+                kCGEventLeftMouseUp,
+                kCGHIDEventTap,
+                kCGMouseButtonLeft,
+            )
+
+        point = CGPoint(x, y)
+        down_event = CGEventCreateMouseEvent(
+            None, kCGEventLeftMouseDown, point, kCGMouseButtonLeft
+        )
+        CGEventPost(kCGHIDEventTap, down_event)
+
+        time.sleep(duration)
+
+        up_event = CGEventCreateMouseEvent(
+            None, kCGEventLeftMouseUp, point, kCGMouseButtonLeft
+        )
+        CGEventPost(kCGHIDEventTap, up_event)
+
+    # =========================================================================
+    # ASSERTIONS
+    # =========================================================================
+
+    def assert_element_exists(self, identifier: str) -> Result[None]:
+        """Assert that an element exists on screen.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result success if exists, failure if not
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+
+            if element is None:
+                return Result.failure(f"Assertion failed: Element not found: {identifier}")
+
+            return Result.success(message=f"Assertion passed: Element exists: {identifier}")
+        except Exception as error:
+            return Result.failure(f"Assertion error: {error}")
+
+    def assert_element_not_exists(self, identifier: str) -> Result[None]:
+        """Assert that an element does NOT exist on screen.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result success if not exists, failure if exists
+        """
+        self._ensure_accessibility_permission()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+
+            if element is not None:
+                return Result.failure(f"Assertion failed: Element exists but should not: {identifier}")
+
+            return Result.success(message=f"Assertion passed: Element does not exist: {identifier}")
+        except Exception as error:
+            return Result.failure(f"Assertion error: {error}")
+
+    def assert_element_visible(self, identifier: str) -> Result[None]:
+        """Assert that an element is visible on screen.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result success if visible, failure if not
+        """
+        result = self.is_element_visible(identifier)
+        if not result.is_success:
+            return Result.failure(f"Assertion error: {result.message}")
+
+        if not result.data:
+            return Result.failure(f"Assertion failed: Element not visible: {identifier}")
+
+        return Result.success(message=f"Assertion passed: Element is visible: {identifier}")
+
+    def assert_element_enabled(self, identifier: str) -> Result[None]:
+        """Assert that an element is enabled.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Result success if enabled, failure if not
+        """
+        result = self.is_element_enabled(identifier)
+        if not result.is_success:
+            return Result.failure(f"Assertion error: {result.message}")
+
+        if not result.data:
+            return Result.failure(f"Assertion failed: Element not enabled: {identifier}")
+
+        return Result.success(message=f"Assertion passed: Element is enabled: {identifier}")
+
+    def assert_text_equals(self, identifier: str, expected: str) -> Result[None]:
+        """Assert that an element's text equals expected value.
+
+        Args:
+            identifier: Element identifier, label, or text
+            expected: Expected text value
+
+        Returns:
+            Result success if text matches, failure if not
+        """
+        result = self.get_element_text(identifier)
+        if not result.is_success:
+            return Result.failure(f"Assertion error: {result.message}")
+
+        actual = result.data
+        if actual != expected:
+            return Result.failure(
+                f"Assertion failed: Text mismatch for '{identifier}'. "
+                f"Expected: '{expected}', Actual: '{actual}'"
+            )
+
+        return Result.success(message=f"Assertion passed: Text equals '{expected}'")
+
+    def assert_text_contains(self, identifier: str, substring: str) -> Result[None]:
+        """Assert that an element's text contains a substring.
+
+        Args:
+            identifier: Element identifier, label, or text
+            substring: Expected substring
+
+        Returns:
+            Result success if text contains substring, failure if not
+        """
+        result = self.get_element_text(identifier)
+        if not result.is_success:
+            return Result.failure(f"Assertion error: {result.message}")
+
+        actual = result.data or ""
+        if substring not in actual:
+            return Result.failure(
+                f"Assertion failed: Text does not contain '{substring}'. "
+                f"Actual text: '{actual}'"
+            )
+
+        return Result.success(message=f"Assertion passed: Text contains '{substring}'")
+
+    def assert_element_count(self, identifier: str, expected_count: int) -> Result[None]:
+        """Assert the count of elements matching an identifier.
+
+        Args:
+            identifier: Element identifier, label, or text
+            expected_count: Expected number of matching elements
+
+        Returns:
+            Result success if count matches, failure if not
+        """
+        result = self.get_element_count(identifier)
+        if not result.is_success:
+            return Result.failure(f"Assertion error: {result.message}")
+
+        actual_count = result.data
+        if actual_count != expected_count:
+            return Result.failure(
+                f"Assertion failed: Element count mismatch for '{identifier}'. "
+                f"Expected: {expected_count}, Actual: {actual_count}"
+            )
+
+        return Result.success(
+            message=f"Assertion passed: Element count is {expected_count}"
+        )
+
+    # =========================================================================
+    # RETRY UTILITIES
+    # =========================================================================
+
+    def tap_element_with_retry(
+        self,
+        identifier: str,
+        retries: int = DEFAULT_RETRY_COUNT,
+        interval: float = DEFAULT_POLL_INTERVAL,
+    ) -> Result[None]:
+        """Tap an element with automatic retry on failure.
+
+        Args:
+            identifier: Element identifier, label, or text
+            retries: Maximum number of retry attempts
+            interval: Delay between retries in seconds
+
+        Returns:
+            Result indicating success or failure
+        """
+        last_error = None
+
+        for attempt in range(retries + 1):
+            result = self.tap_element(identifier)
+            if result.is_success:
+                if attempt > 0:
+                    return Result.success(
+                        message=f"Tapped element after {attempt} retries"
+                    )
+                return result
+
+            last_error = result.message
+            if attempt < retries:
+                self._logger.debug(
+                    "Tap failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    retries + 1,
+                    last_error
+                )
+                time.sleep(interval)
+
+        return Result.failure(
+            f"Failed to tap element after {retries + 1} attempts: {last_error}"
+        )
+
+    def input_text_with_retry(
+        self,
+        identifier: str,
+        text: str,
+        retries: int = DEFAULT_RETRY_COUNT,
+        interval: float = DEFAULT_POLL_INTERVAL,
+    ) -> Result[None]:
+        """Input text with automatic retry on failure.
+
+        Args:
+            identifier: Element identifier, label, or text
+            text: Text to input
+            retries: Maximum number of retry attempts
+            interval: Delay between retries in seconds
+
+        Returns:
+            Result indicating success or failure
+        """
+        last_error = None
+
+        for attempt in range(retries + 1):
+            result = self.input_text(identifier, text)
+            if result.is_success:
+                if attempt > 0:
+                    return Result.success(
+                        message=f"Input text after {attempt} retries"
+                    )
+                return result
+
+            last_error = result.message
+            if attempt < retries:
+                self._logger.debug(
+                    "Input failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    retries + 1,
+                    last_error
+                )
+                time.sleep(interval)
+
+        return Result.failure(
+            f"Failed to input text after {retries + 1} attempts: {last_error}"
+        )

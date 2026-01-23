@@ -1,0 +1,29 @@
+[project]
+name = "ios-simulator-mcp"
+version = "1.0.0"
+description = "MCP server for controlling iOS Simulator via macOS Accessibility APIs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "HanbitN Engineering" }
+]
+dependencies = [
+  "mcp>=0.3.0",
+  "pyobjc>=10.0"
+]
+
+[project.scripts]
+ios-simulator-mcp = "lib.main:main"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lib*"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+python_files = "*_test.py"

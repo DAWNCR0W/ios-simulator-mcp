@@ -1,0 +1,49 @@
+title: "[Q&A] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Ask a Question
+
+        Thanks for taking the time to ask a question! Please provide as much detail as possible.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: Describe your question in detail...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to achieve? What have you already tried?
+      placeholder: |
+        - I'm trying to...
+        - I've already tried...
+        - My setup is...
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (if relevant)
+      description: Your environment details
+      placeholder: |
+        - macOS:
+        - Python:
+        - Xcode:
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before Asking
+      options:
+        - label: I have read the README and documentation
+          required: true
+        - label: I have searched existing discussions and issues
+          required: true
