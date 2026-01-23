@@ -118,6 +118,7 @@ jobs:
           sha256 = os.environ["SHA256"]
 
           content = formula_path.read_text(encoding="utf-8")
+          content = re.sub(r'^\s*\\1.*\\n?', '', content, flags=re.M)
           content = re.sub(r'^\s*url\s+"[^"]+"', f'  url "{tarball_url}"', content, flags=re.M)
           content = re.sub(r'^\s*sha256\s+"[^"]+"', f'  sha256 "{sha256}"', content, flags=re.M)
 
