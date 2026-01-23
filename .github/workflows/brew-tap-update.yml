@@ -122,14 +122,20 @@ jobs:
           content = re.sub(r'^\s*sha256\s+"[^"]+"', f'  sha256 "{sha256}"', content, flags=re.M)
 
           if re.search(r'^\s*version\s+"[^"]+"', content, flags=re.M):
-              content = re.sub(r'^\s*version\s+"[^"]+"', f'  version "{version}"', content, flags=re.M)
-          else:
               content = re.sub(
-                  r'(^\s*url\s+"[^"]+"\s*$)',
-                  r'\\1\\n  version "' + version + '"',
+                  r'^\s*version\s+"[^"]+"',
+                  f'  version "{version}"',
                   content,
                   flags=re.M,
               )
+          else:
+              lines = content.splitlines()
+              for index, line in enumerate(lines):
+                  if re.match(r'^\s*url\s+"[^"]+"', line):
+                      indent = re.match(r'^(\s*)', line).group(1)
+                      lines.insert(index + 1, f'{indent}version "{version}"')
+                      break
+              content = "\n".join(lines) + "\n"
 
           formula_path.write_text(content, encoding="utf-8")
           PY
