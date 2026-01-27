@@ -9,11 +9,23 @@ from lib.features.simulator_control.domain.entities.ui_element import UiElement
 from lib.features.simulator_control.domain.usecases.input_text_usecase import (
     InputTextUsecase,
 )
+from lib.features.simulator_control.domain.usecases.install_app_usecase import (
+    InstallAppUsecase,
+)
 from lib.features.simulator_control.domain.usecases.launch_app_usecase import (
     LaunchAppUsecase,
 )
 from lib.features.simulator_control.domain.usecases.list_simulators_usecase import (
     ListSimulatorsUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_runtimes_usecase import (
+    ListRuntimesUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_device_types_usecase import (
+    ListDeviceTypesUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_installed_apps_usecase import (
+    ListInstalledAppsUsecase,
 )
 from lib.features.simulator_control.domain.usecases.list_ui_tree_usecase import (
     ListUiTreeUsecase,
@@ -32,6 +44,54 @@ from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase impo
 )
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
+)
+from lib.features.simulator_control.domain.usecases.create_simulator_usecase import (
+    CreateSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.delete_simulator_usecase import (
+    DeleteSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.erase_simulator_usecase import (
+    EraseSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
+    GetAppContainerUsecase,
+)
+from lib.features.simulator_control.domain.usecases.push_file_usecase import (
+    PushFileUsecase,
+)
+from lib.features.simulator_control.domain.usecases.pull_file_usecase import (
+    PullFileUsecase,
+)
+from lib.features.simulator_control.domain.usecases.set_privacy_usecase import (
+    SetPrivacyUsecase,
+)
+from lib.features.simulator_control.domain.usecases.add_media_usecase import (
+    AddMediaUsecase,
+)
+from lib.features.simulator_control.domain.usecases.start_recording_usecase import (
+    StartRecordingUsecase,
+)
+from lib.features.simulator_control.domain.usecases.stop_recording_usecase import (
+    StopRecordingUsecase,
+)
+from lib.features.simulator_control.domain.usecases.boot_simulator_usecase import (
+    BootSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.shutdown_simulator_usecase import (
+    ShutdownSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.uninstall_app_usecase import (
+    UninstallAppUsecase,
+)
+from lib.features.simulator_control.domain.usecases.open_url_usecase import (
+    OpenUrlUsecase,
+)
+from lib.features.simulator_control.domain.usecases.set_clipboard_usecase import (
+    SetClipboardUsecase,
+)
+from lib.features.simulator_control.domain.usecases.get_clipboard_usecase import (
+    GetClipboardUsecase,
 )
 from lib.features.simulator_control.domain.usecases.handle_permission_alert_usecase import (
     HandlePermissionAlertUsecase,
@@ -111,6 +171,26 @@ class SimulatorMcpViewModel:
         reset_app_usecase: ResetAppUsecase,
         list_simulators_usecase: ListSimulatorsUsecase,
         take_screenshot_usecase: TakeScreenshotUsecase,
+        list_runtimes_usecase: ListRuntimesUsecase,
+        list_device_types_usecase: ListDeviceTypesUsecase,
+        create_simulator_usecase: CreateSimulatorUsecase,
+        delete_simulator_usecase: DeleteSimulatorUsecase,
+        erase_simulator_usecase: EraseSimulatorUsecase,
+        list_installed_apps_usecase: ListInstalledAppsUsecase,
+        get_app_container_usecase: GetAppContainerUsecase,
+        push_file_usecase: PushFileUsecase,
+        pull_file_usecase: PullFileUsecase,
+        set_privacy_usecase: SetPrivacyUsecase,
+        add_media_usecase: AddMediaUsecase,
+        start_recording_usecase: StartRecordingUsecase,
+        stop_recording_usecase: StopRecordingUsecase,
+        boot_simulator_usecase: BootSimulatorUsecase,
+        shutdown_simulator_usecase: ShutdownSimulatorUsecase,
+        install_app_usecase: InstallAppUsecase,
+        uninstall_app_usecase: UninstallAppUsecase,
+        open_url_usecase: OpenUrlUsecase,
+        set_clipboard_usecase: SetClipboardUsecase,
+        get_clipboard_usecase: GetClipboardUsecase,
         handle_permission_alert_usecase: HandlePermissionAlertUsecase,
         set_target_window_usecase: SetTargetWindowUsecase,
         # Wait use cases
@@ -144,6 +224,26 @@ class SimulatorMcpViewModel:
         self._reset_app_usecase = reset_app_usecase
         self._list_simulators_usecase = list_simulators_usecase
         self._take_screenshot_usecase = take_screenshot_usecase
+        self._list_runtimes_usecase = list_runtimes_usecase
+        self._list_device_types_usecase = list_device_types_usecase
+        self._create_simulator_usecase = create_simulator_usecase
+        self._delete_simulator_usecase = delete_simulator_usecase
+        self._erase_simulator_usecase = erase_simulator_usecase
+        self._list_installed_apps_usecase = list_installed_apps_usecase
+        self._get_app_container_usecase = get_app_container_usecase
+        self._push_file_usecase = push_file_usecase
+        self._pull_file_usecase = pull_file_usecase
+        self._set_privacy_usecase = set_privacy_usecase
+        self._add_media_usecase = add_media_usecase
+        self._start_recording_usecase = start_recording_usecase
+        self._stop_recording_usecase = stop_recording_usecase
+        self._boot_simulator_usecase = boot_simulator_usecase
+        self._shutdown_simulator_usecase = shutdown_simulator_usecase
+        self._install_app_usecase = install_app_usecase
+        self._uninstall_app_usecase = uninstall_app_usecase
+        self._open_url_usecase = open_url_usecase
+        self._set_clipboard_usecase = set_clipboard_usecase
+        self._get_clipboard_usecase = get_clipboard_usecase
         self._handle_permission_alert_usecase = handle_permission_alert_usecase
         self._set_target_window_usecase = set_target_window_usecase
         # Wait
@@ -208,6 +308,102 @@ class SimulatorMcpViewModel:
     ) -> Result[dict]:
         """Take a simulator screenshot."""
         return self._take_screenshot_usecase.execute(device_id, output_path)
+
+    def list_runtimes(self) -> Result[list[dict]]:
+        """List available simulator runtimes."""
+        return self._list_runtimes_usecase.execute()
+
+    def list_device_types(self) -> Result[list[dict]]:
+        """List available simulator device types."""
+        return self._list_device_types_usecase.execute()
+
+    def create_simulator(
+        self, name: str, device_type_id: str, runtime_id: str
+    ) -> Result[dict]:
+        """Create a simulator device."""
+        return self._create_simulator_usecase.execute(name, device_type_id, runtime_id)
+
+    def delete_simulator(self, device_id: str) -> Result[None]:
+        """Delete a simulator device by UDID."""
+        return self._delete_simulator_usecase.execute(device_id)
+
+    def erase_simulator(self, device_id: Optional[str], all_devices: bool) -> Result[dict]:
+        """Erase simulator data."""
+        return self._erase_simulator_usecase.execute(device_id, all_devices)
+
+    def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
+        """List installed apps on the simulator."""
+        return self._list_installed_apps_usecase.execute(device_id)
+
+    def get_app_container(
+        self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
+    ) -> Result[dict]:
+        """Get the app container path for a bundle."""
+        return self._get_app_container_usecase.execute(bundle_id, device_id, container_type)
+
+    def push_file(
+        self, source_path: str, destination_path: str, device_id: Optional[str]
+    ) -> Result[None]:
+        """Push a file to the simulator."""
+        return self._push_file_usecase.execute(source_path, destination_path, device_id)
+
+    def pull_file(
+        self, source_path: str, destination_path: str, device_id: Optional[str]
+    ) -> Result[None]:
+        """Pull a file from the simulator."""
+        return self._pull_file_usecase.execute(source_path, destination_path, device_id)
+
+    def set_privacy(
+        self,
+        action: str,
+        service: str,
+        bundle_id: Optional[str],
+        device_id: Optional[str],
+    ) -> Result[None]:
+        """Update simulator privacy permissions."""
+        return self._set_privacy_usecase.execute(action, service, bundle_id, device_id)
+
+    def add_media(self, media_paths: list[str], device_id: Optional[str]) -> Result[dict]:
+        """Add media files to the simulator photo library."""
+        return self._add_media_usecase.execute(media_paths, device_id)
+
+    def start_recording(
+        self, device_id: Optional[str], output_path: Optional[str]
+    ) -> Result[dict]:
+        """Start a simulator screen recording."""
+        return self._start_recording_usecase.execute(device_id, output_path)
+
+    def stop_recording(self, device_id: Optional[str]) -> Result[dict]:
+        """Stop a simulator screen recording."""
+        return self._stop_recording_usecase.execute(device_id)
+
+    def boot_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        """Boot a simulator device."""
+        return self._boot_simulator_usecase.execute(device_id)
+
+    def shutdown_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        """Shutdown a simulator device or all booted devices."""
+        return self._shutdown_simulator_usecase.execute(device_id)
+
+    def install_app(self, app_path: str, device_id: Optional[str]) -> Result[None]:
+        """Install an app bundle on the simulator."""
+        return self._install_app_usecase.execute(app_path, device_id)
+
+    def uninstall_app(self, bundle_id: str, device_id: Optional[str]) -> Result[None]:
+        """Uninstall an app bundle from the simulator."""
+        return self._uninstall_app_usecase.execute(bundle_id, device_id)
+
+    def open_url(self, url: str, device_id: Optional[str]) -> Result[None]:
+        """Open a URL inside the simulator."""
+        return self._open_url_usecase.execute(url, device_id)
+
+    def set_clipboard(self, text: str, device_id: Optional[str]) -> Result[None]:
+        """Set clipboard text on the simulator."""
+        return self._set_clipboard_usecase.execute(text, device_id)
+
+    def get_clipboard(self, device_id: Optional[str]) -> Result[str]:
+        """Get clipboard text from the simulator."""
+        return self._get_clipboard_usecase.execute(device_id)
 
     def handle_permission_alert(self, action: str) -> Result[None]:
         """Handle a permission alert by action."""

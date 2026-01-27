@@ -58,6 +58,82 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     ) -> Result[dict]:
         return self._simctl_datasource.take_screenshot(device_id, output_path)
 
+    def list_runtimes(self) -> Result[list[dict]]:
+        return self._simctl_datasource.list_runtimes()
+
+    def list_device_types(self) -> Result[list[dict]]:
+        return self._simctl_datasource.list_device_types()
+
+    def create_simulator(
+        self, name: str, device_type_id: str, runtime_id: str
+    ) -> Result[dict]:
+        return self._simctl_datasource.create_simulator(name, device_type_id, runtime_id)
+
+    def delete_simulator(self, device_id: str) -> Result[None]:
+        return self._simctl_datasource.delete_simulator(device_id)
+
+    def erase_simulator(self, device_id: Optional[str], all_devices: bool) -> Result[dict]:
+        return self._simctl_datasource.erase_simulator(device_id, all_devices)
+
+    def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
+        return self._simctl_datasource.list_installed_apps(device_id)
+
+    def get_app_container(
+        self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
+    ) -> Result[dict]:
+        return self._simctl_datasource.get_app_container(bundle_id, device_id, container_type)
+
+    def push_file(
+        self, source_path: str, destination_path: str, device_id: Optional[str]
+    ) -> Result[None]:
+        return self._simctl_datasource.push_file(source_path, destination_path, device_id)
+
+    def pull_file(
+        self, source_path: str, destination_path: str, device_id: Optional[str]
+    ) -> Result[None]:
+        return self._simctl_datasource.pull_file(source_path, destination_path, device_id)
+
+    def set_privacy(
+        self,
+        action: str,
+        service: str,
+        bundle_id: Optional[str],
+        device_id: Optional[str],
+    ) -> Result[None]:
+        return self._simctl_datasource.set_privacy(action, service, bundle_id, device_id)
+
+    def add_media(self, media_paths: list[str], device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.add_media(media_paths, device_id)
+
+    def start_recording(
+        self, device_id: Optional[str], output_path: Optional[str]
+    ) -> Result[dict]:
+        return self._simctl_datasource.start_recording(device_id, output_path)
+
+    def stop_recording(self, device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.stop_recording(device_id)
+
+    def boot_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.boot_simulator(device_id)
+
+    def shutdown_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.shutdown_simulator(device_id)
+
+    def install_app(self, app_path: str, device_id: Optional[str]) -> Result[None]:
+        return self._simctl_datasource.install_app(app_path, device_id)
+
+    def uninstall_app(self, bundle_id: str, device_id: Optional[str]) -> Result[None]:
+        return self._simctl_datasource.uninstall_app(bundle_id, device_id)
+
+    def open_url(self, url: str, device_id: Optional[str]) -> Result[None]:
+        return self._simctl_datasource.open_url(url, device_id)
+
+    def set_clipboard(self, text: str, device_id: Optional[str]) -> Result[None]:
+        return self._simctl_datasource.set_clipboard(text, device_id)
+
+    def get_clipboard(self, device_id: Optional[str]) -> Result[str]:
+        return self._simctl_datasource.get_clipboard(device_id)
+
     def handle_permission_alert(self, action: str) -> Result[None]:
         return self._accessibility_datasource.handle_permission_alert(action)
 

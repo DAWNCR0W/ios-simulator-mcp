@@ -37,6 +37,11 @@ wait utilities, gestures, assertions, and screenshots.
 - Tap elements by identifier/label and tap by coordinates
 - Text input into fields
 - Launch/stop/reset apps (simctl)
+- Boot/shutdown simulators, install/uninstall apps, open URLs (simctl)
+- Read/write simulator clipboard (simctl)
+- Create/delete/erase simulators, list runtimes and device types (simctl)
+- App data & privacy utilities (list apps, containers, push/pull, privacy)
+- Media automation (add media, screen recording)
 - Screenshot capture (simctl)
 - Permission alert handling (allow/deny)
 - Wait utilities, state checks, gestures, assertions, retry helpers
@@ -98,6 +103,9 @@ open -a Simulator
 ```bash
 ios-simulator-mcp --transport stdio
 ```
+
+Note: This manual step is mainly for direct testing/debugging. In typical usage (Claude Code, Codex, Gemini CLI, etc.),
+the client launches the stdio server for you when you add the MCP configuration, so you usually do not need to run it yourself.
 
 Or run directly with Python:
 
@@ -187,6 +195,26 @@ All tools return:
 - `reset_app(bundle_id: str, device_id: str = None)`
 - `list_simulators()`
 - `take_screenshot(device_id: str = None, output_path: str = None)`
+- `list_runtimes()`
+- `list_device_types()`
+- `create_simulator(name: str, device_type_id: str, runtime_id: str)`
+- `delete_simulator(device_id: str)`
+- `erase_simulator(device_id: str = None, all_devices: bool = False)`
+- `list_installed_apps(device_id: str = None)`
+- `get_app_container(bundle_id: str, device_id: str = None, container_type: str = None)`
+- `push_file(source_path: str, destination_path: str, device_id: str = None)`
+- `pull_file(source_path: str, destination_path: str, device_id: str = None)`
+- `set_privacy(action: str, service: str, bundle_id: str = None, device_id: str = None)`
+- `add_media(media_paths: list[str], device_id: str = None)`
+- `start_recording(device_id: str = None, output_path: str = None)`
+- `stop_recording(device_id: str = None)`
+- `boot_simulator(device_id: str = None)`
+- `shutdown_simulator(device_id: str = None)`
+- `install_app(app_path: str, device_id: str = None)`
+- `uninstall_app(bundle_id: str, device_id: str = None)`
+- `open_url(url: str, device_id: str = None)`
+- `set_clipboard(text: str, device_id: str = None)`
+- `get_clipboard(device_id: str = None)`
 - `handle_permission_alert(action: str = "allow")`
 - `allow_permission_alert()`
 - `deny_permission_alert()`
