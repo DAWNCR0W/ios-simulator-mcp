@@ -88,12 +88,353 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def list_runtimes() -> dict:
+        """List available simulator runtimes."""
+        try:
+            result = viewmodel.list_runtimes()
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def list_device_types() -> dict:
+        """List available simulator device types."""
+        try:
+            result = viewmodel.list_device_types()
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def create_simulator(name: str, device_type_id: str, runtime_id: str) -> dict:
+        """Create a new simulator device.
+
+        Args:
+            name: Simulator display name
+            device_type_id: Device type identifier (e.g., com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro)
+            runtime_id: Runtime identifier (e.g., com.apple.CoreSimulator.SimRuntime.iOS-17-5)
+
+        Returns:
+            Result with created device UDID
+        """
+        try:
+            result = viewmodel.create_simulator(name, device_type_id, runtime_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def delete_simulator(device_id: str) -> dict:
+        """Delete a simulator device by UDID.
+
+        Args:
+            device_id: Simulator UDID
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.delete_simulator(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def erase_simulator(device_id: Optional[str] = None, all_devices: bool = False) -> dict:
+        """Erase simulator data.
+
+        Args:
+            device_id: Simulator UDID (required unless all_devices is true)
+            all_devices: When true, erases all simulators
+
+        Returns:
+            Result with erase target info
+        """
+        try:
+            result = viewmodel.erase_simulator(device_id, all_devices)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def list_installed_apps(device_id: Optional[str] = None) -> dict:
+        """List installed apps on the simulator.
+
+        Args:
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            List of installed apps
+        """
+        try:
+            result = viewmodel.list_installed_apps(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def get_app_container(
+        bundle_id: str,
+        device_id: Optional[str] = None,
+        container_type: Optional[str] = None,
+    ) -> dict:
+        """Get the app container path for a bundle.
+
+        Args:
+            bundle_id: App bundle identifier
+            device_id: Simulator UDID (optional)
+            container_type: Container type (app, data, or other simctl-supported type)
+
+        Returns:
+            Container path info
+        """
+        try:
+            result = viewmodel.get_app_container(bundle_id, device_id, container_type)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def push_file(
+        source_path: str,
+        destination_path: str,
+        device_id: Optional[str] = None,
+    ) -> dict:
+        """Push a file to the simulator.
+
+        Args:
+            source_path: Local source path
+            destination_path: Destination path on simulator
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.push_file(source_path, destination_path, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def pull_file(
+        source_path: str,
+        destination_path: str,
+        device_id: Optional[str] = None,
+    ) -> dict:
+        """Pull a file from the simulator.
+
+        Args:
+            source_path: Source path on simulator
+            destination_path: Local destination path
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.pull_file(source_path, destination_path, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def set_privacy(
+        action: str,
+        service: str,
+        bundle_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+    ) -> dict:
+        """Update simulator privacy permissions.
+
+        Args:
+            action: grant, revoke, or reset
+            service: Privacy service (e.g., camera, microphone)
+            bundle_id: App bundle identifier (optional)
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.set_privacy(action, service, bundle_id, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def add_media(media_paths: list[str], device_id: Optional[str] = None) -> dict:
+        """Add media files to the simulator photo library.
+
+        Args:
+            media_paths: List of file paths to add
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Result with added count
+        """
+        try:
+            result = viewmodel.add_media(media_paths, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def start_recording(device_id: Optional[str] = None, output_path: Optional[str] = None) -> dict:
+        """Start a simulator screen recording.
+
+        Args:
+            device_id: Simulator UDID (optional)
+            output_path: Output path for video file (optional)
+
+        Returns:
+            Result with recording path info
+        """
+        try:
+            result = viewmodel.start_recording(device_id, output_path)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def stop_recording(device_id: Optional[str] = None) -> dict:
+        """Stop a simulator screen recording.
+
+        Args:
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Result with recording path info
+        """
+        try:
+            result = viewmodel.stop_recording(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def take_screenshot(
         device_id: Optional[str] = None, output_path: Optional[str] = None
     ) -> dict:
         """Capture a simulator screenshot and save it to disk."""
         try:
             result = viewmodel.take_screenshot(device_id, output_path)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def boot_simulator(device_id: Optional[str] = None) -> dict:
+        """Boot a simulator device.
+
+        Args:
+            device_id: Simulator UDID (defaults to env or first available)
+
+        Returns:
+            Result with booted device info
+        """
+        try:
+            result = viewmodel.boot_simulator(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def shutdown_simulator(device_id: Optional[str] = None) -> dict:
+        """Shutdown a simulator device or all booted devices.
+
+        Args:
+            device_id: Simulator UDID (if omitted, shuts down booted devices)
+
+        Returns:
+            Result with shutdown target info
+        """
+        try:
+            result = viewmodel.shutdown_simulator(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def install_app(app_path: str, device_id: Optional[str] = None) -> dict:
+        """Install an app bundle on the simulator.
+
+        Args:
+            app_path: Path to .app bundle or .ipa
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.install_app(app_path, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def uninstall_app(bundle_id: str, device_id: Optional[str] = None) -> dict:
+        """Uninstall an app bundle from the simulator.
+
+        Args:
+            bundle_id: App bundle identifier
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.uninstall_app(bundle_id, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def open_url(url: str, device_id: Optional[str] = None) -> dict:
+        """Open a URL inside the simulator.
+
+        Args:
+            url: URL to open (http(s) or custom scheme)
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.open_url(url, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def set_clipboard(text: str, device_id: Optional[str] = None) -> dict:
+        """Set clipboard text on the simulator.
+
+        Args:
+            text: Clipboard text to set
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.set_clipboard(text, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def get_clipboard(device_id: Optional[str] = None) -> dict:
+        """Get clipboard text from the simulator.
+
+        Args:
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            Clipboard text in result data
+        """
+        try:
+            result = viewmodel.get_clipboard(device_id)
             return result.to_dict()
         except Exception as error:
             return Result.failure(str(error)).to_dict()

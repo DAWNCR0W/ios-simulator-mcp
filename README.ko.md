@@ -37,6 +37,11 @@
 - 식별자/라벨 기반 탭 및 좌표 탭
 - 텍스트 입력
 - 앱 실행/종료/리셋(simctl)
+- 시뮬레이터 부팅/종료, 앱 설치/제거, URL 열기(simctl)
+- 시뮬레이터 클립보드 읽기/쓰기(simctl)
+- 시뮬레이터 생성/삭제/초기화 및 런타임·디바이스 타입 조회(simctl)
+- 앱 데이터/권한 유틸리티(앱 목록, 컨테이너, push/pull, 권한)
+- 미디어 자동화(미디어 추가, 화면 녹화)
 - 스크린샷 캡처(simctl)
 - 권한 알림 처리(허용/거부)
 - 대기 유틸리티, 상태 체크, 제스처, 어설션, 재시도 헬퍼
@@ -187,6 +192,26 @@ args = ["--transport", "stdio"]
 - `reset_app(bundle_id: str, device_id: str = None)`
 - `list_simulators()`
 - `take_screenshot(device_id: str = None, output_path: str = None)`
+- `list_runtimes()`
+- `list_device_types()`
+- `create_simulator(name: str, device_type_id: str, runtime_id: str)`
+- `delete_simulator(device_id: str)`
+- `erase_simulator(device_id: str = None, all_devices: bool = False)`
+- `list_installed_apps(device_id: str = None)`
+- `get_app_container(bundle_id: str, device_id: str = None, container_type: str = None)`
+- `push_file(source_path: str, destination_path: str, device_id: str = None)`
+- `pull_file(source_path: str, destination_path: str, device_id: str = None)`
+- `set_privacy(action: str, service: str, bundle_id: str = None, device_id: str = None)`
+- `add_media(media_paths: list[str], device_id: str = None)`
+- `start_recording(device_id: str = None, output_path: str = None)`
+- `stop_recording(device_id: str = None)`
+- `boot_simulator(device_id: str = None)`
+- `shutdown_simulator(device_id: str = None)`
+- `install_app(app_path: str, device_id: str = None)`
+- `uninstall_app(bundle_id: str, device_id: str = None)`
+- `open_url(url: str, device_id: str = None)`
+- `set_clipboard(text: str, device_id: str = None)`
+- `get_clipboard(device_id: str = None)`
 - `handle_permission_alert(action: str = "allow")`
 - `allow_permission_alert()`
 - `deny_permission_alert()`

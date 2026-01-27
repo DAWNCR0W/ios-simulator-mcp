@@ -53,6 +53,98 @@ class SimulatorRepository(ABC):
         """Take a simulator screenshot and return file info."""
 
     @abstractmethod
+    def list_runtimes(self) -> Result[list[dict]]:
+        """List available simulator runtimes."""
+
+    @abstractmethod
+    def list_device_types(self) -> Result[list[dict]]:
+        """List available simulator device types."""
+
+    @abstractmethod
+    def create_simulator(
+        self, name: str, device_type_id: str, runtime_id: str
+    ) -> Result[dict]:
+        """Create a new simulator device."""
+
+    @abstractmethod
+    def delete_simulator(self, device_id: str) -> Result[None]:
+        """Delete a simulator device by UDID."""
+
+    @abstractmethod
+    def erase_simulator(self, device_id: Optional[str], all_devices: bool) -> Result[dict]:
+        """Erase simulator data for a device or all devices."""
+
+    @abstractmethod
+    def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
+        """List installed apps on the simulator."""
+
+    @abstractmethod
+    def get_app_container(
+        self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
+    ) -> Result[dict]:
+        """Get the app container path for a bundle."""
+
+    @abstractmethod
+    def push_file(self, source_path: str, destination_path: str, device_id: Optional[str]) -> Result[None]:
+        """Push a file to the simulator."""
+
+    @abstractmethod
+    def pull_file(self, source_path: str, destination_path: str, device_id: Optional[str]) -> Result[None]:
+        """Pull a file from the simulator."""
+
+    @abstractmethod
+    def set_privacy(
+        self,
+        action: str,
+        service: str,
+        bundle_id: Optional[str],
+        device_id: Optional[str],
+    ) -> Result[None]:
+        """Grant/revoke/reset privacy permissions for a service."""
+
+    @abstractmethod
+    def add_media(self, media_paths: list[str], device_id: Optional[str]) -> Result[dict]:
+        """Add media files to the simulator photo library."""
+
+    @abstractmethod
+    def start_recording(
+        self, device_id: Optional[str], output_path: Optional[str]
+    ) -> Result[dict]:
+        """Start a simulator screen recording."""
+
+    @abstractmethod
+    def stop_recording(self, device_id: Optional[str]) -> Result[dict]:
+        """Stop a simulator screen recording."""
+
+    @abstractmethod
+    def boot_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        """Boot a simulator device."""
+
+    @abstractmethod
+    def shutdown_simulator(self, device_id: Optional[str]) -> Result[dict]:
+        """Shutdown a simulator device or all booted devices."""
+
+    @abstractmethod
+    def install_app(self, app_path: str, device_id: Optional[str]) -> Result[None]:
+        """Install an app bundle on the simulator."""
+
+    @abstractmethod
+    def uninstall_app(self, bundle_id: str, device_id: Optional[str]) -> Result[None]:
+        """Uninstall an app bundle from the simulator."""
+
+    @abstractmethod
+    def open_url(self, url: str, device_id: Optional[str]) -> Result[None]:
+        """Open a URL inside the simulator."""
+
+    @abstractmethod
+    def set_clipboard(self, text: str, device_id: Optional[str]) -> Result[None]:
+        """Set clipboard text on the simulator."""
+
+    @abstractmethod
+    def get_clipboard(self, device_id: Optional[str]) -> Result[str]:
+        """Get clipboard text from the simulator."""
+
+    @abstractmethod
     def handle_permission_alert(self, action: str) -> Result[None]:
         """Handle system permission alerts (e.g., notifications)."""
 
