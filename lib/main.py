@@ -20,11 +20,23 @@ from lib.features.simulator_control.data.repositories.simulator_repository_impl 
 from lib.features.simulator_control.domain.usecases.input_text_usecase import (
     InputTextUsecase,
 )
+from lib.features.simulator_control.domain.usecases.install_app_usecase import (
+    InstallAppUsecase,
+)
 from lib.features.simulator_control.domain.usecases.launch_app_usecase import (
     LaunchAppUsecase,
 )
 from lib.features.simulator_control.domain.usecases.list_simulators_usecase import (
     ListSimulatorsUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_runtimes_usecase import (
+    ListRuntimesUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_device_types_usecase import (
+    ListDeviceTypesUsecase,
+)
+from lib.features.simulator_control.domain.usecases.list_installed_apps_usecase import (
+    ListInstalledAppsUsecase,
 )
 from lib.features.simulator_control.domain.usecases.list_ui_tree_usecase import (
     ListUiTreeUsecase,
@@ -43,6 +55,54 @@ from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase impo
 )
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
+)
+from lib.features.simulator_control.domain.usecases.create_simulator_usecase import (
+    CreateSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.delete_simulator_usecase import (
+    DeleteSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.erase_simulator_usecase import (
+    EraseSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
+    GetAppContainerUsecase,
+)
+from lib.features.simulator_control.domain.usecases.push_file_usecase import (
+    PushFileUsecase,
+)
+from lib.features.simulator_control.domain.usecases.pull_file_usecase import (
+    PullFileUsecase,
+)
+from lib.features.simulator_control.domain.usecases.set_privacy_usecase import (
+    SetPrivacyUsecase,
+)
+from lib.features.simulator_control.domain.usecases.add_media_usecase import (
+    AddMediaUsecase,
+)
+from lib.features.simulator_control.domain.usecases.start_recording_usecase import (
+    StartRecordingUsecase,
+)
+from lib.features.simulator_control.domain.usecases.stop_recording_usecase import (
+    StopRecordingUsecase,
+)
+from lib.features.simulator_control.domain.usecases.boot_simulator_usecase import (
+    BootSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.shutdown_simulator_usecase import (
+    ShutdownSimulatorUsecase,
+)
+from lib.features.simulator_control.domain.usecases.uninstall_app_usecase import (
+    UninstallAppUsecase,
+)
+from lib.features.simulator_control.domain.usecases.open_url_usecase import (
+    OpenUrlUsecase,
+)
+from lib.features.simulator_control.domain.usecases.set_clipboard_usecase import (
+    SetClipboardUsecase,
+)
+from lib.features.simulator_control.domain.usecases.get_clipboard_usecase import (
+    GetClipboardUsecase,
 )
 from lib.features.simulator_control.domain.usecases.handle_permission_alert_usecase import (
     HandlePermissionAlertUsecase,
@@ -130,6 +190,26 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         reset_app_usecase=ResetAppUsecase(repository),
         list_simulators_usecase=ListSimulatorsUsecase(repository),
         take_screenshot_usecase=TakeScreenshotUsecase(repository),
+        list_runtimes_usecase=ListRuntimesUsecase(repository),
+        list_device_types_usecase=ListDeviceTypesUsecase(repository),
+        create_simulator_usecase=CreateSimulatorUsecase(repository),
+        delete_simulator_usecase=DeleteSimulatorUsecase(repository),
+        erase_simulator_usecase=EraseSimulatorUsecase(repository),
+        list_installed_apps_usecase=ListInstalledAppsUsecase(repository),
+        get_app_container_usecase=GetAppContainerUsecase(repository),
+        push_file_usecase=PushFileUsecase(repository),
+        pull_file_usecase=PullFileUsecase(repository),
+        set_privacy_usecase=SetPrivacyUsecase(repository),
+        add_media_usecase=AddMediaUsecase(repository),
+        start_recording_usecase=StartRecordingUsecase(repository),
+        stop_recording_usecase=StopRecordingUsecase(repository),
+        boot_simulator_usecase=BootSimulatorUsecase(repository),
+        shutdown_simulator_usecase=ShutdownSimulatorUsecase(repository),
+        install_app_usecase=InstallAppUsecase(repository),
+        uninstall_app_usecase=UninstallAppUsecase(repository),
+        open_url_usecase=OpenUrlUsecase(repository),
+        set_clipboard_usecase=SetClipboardUsecase(repository),
+        get_clipboard_usecase=GetClipboardUsecase(repository),
         handle_permission_alert_usecase=HandlePermissionAlertUsecase(repository),
         set_target_window_usecase=SetTargetWindowUsecase(repository),
         # Wait use cases
