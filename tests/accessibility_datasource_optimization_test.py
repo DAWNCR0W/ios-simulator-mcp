@@ -85,7 +85,7 @@ def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
 
     calls = {"count": 0}
 
-    def fake_find_alert(_window, _app):
+    def fake_find_alert(_window, _app, deadline=None):
         calls["count"] += 1
         if calls["count"] == 1:
             return alert
@@ -98,7 +98,7 @@ def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     }
 
     monkeypatch.setattr(datasource, "_find_alert_container", fake_find_alert)
-    monkeypatch.setattr(datasource, "_find_buttons", lambda _root, _app: [button])
+    monkeypatch.setattr(datasource, "_find_buttons", lambda _root, _app, deadline=None: [button])
     monkeypatch.setattr(datasource, "_select_alert_button", lambda _buttons, _action: button)
     monkeypatch.setattr(datasource, "_perform_press", lambda _element: False)
     monkeypatch.setattr(datasource, "_tap_alert_by_coordinates", lambda *_args: False)
@@ -118,7 +118,7 @@ def test_handle_permission_alert_taps_by_coordinates_when_alert_role_missing(mon
 
     calls = {"count": 0}
 
-    def fake_find_alert(_window, _app):
+    def fake_find_alert(_window, _app, deadline=None):
         calls["count"] += 1
         if calls["count"] == 1:
             return None
@@ -141,13 +141,28 @@ def test_handle_permission_alert_taps_by_coordinates_when_alert_role_missing(mon
     assert tapped["count"] >= 1
 
 
+def test_handle_permission_alert_returns_timeout_failure(monkeypatch):
+    datasource = AccessibilityDatasource(DummyProcessDatasource())
+    datasource._alert_handle_timeout_seconds = 0.5
+
+    monotonic_values = iter([0.0, 1.0])
+    monkeypatch.setattr(time, "monotonic", lambda: next(monotonic_values, 1.0))
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
+
+    result = datasource.handle_permission_alert("allow")
+
+    assert result.is_success is False
+    assert "Timed out while handling permission alert." in result.message
+
+
 def test_handle_permission_alert_uses_keyboard_fallback_without_alert_role(monkeypatch):
     datasource = AccessibilityDatasource(DummyProcessDatasource())
 
     monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
     monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
     monkeypatch.setattr(time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(datasource, "_find_alert_container", lambda _window, _app: None)
+    monkeypatch.setattr(datasource, "_find_alert_container", lambda _window, _app, deadline=None: None)
     monkeypatch.setattr(
         datasource,
         "_find_buttons_fast",
