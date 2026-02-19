@@ -1,11 +1,8 @@
-Release 1.2.0
+Release 1.2.1
 
-- Added robust `simctl` timeout, retry, and safer command error reporting.
-- Added booted-device caching to reduce repeated `simctl list devices booted` overhead.
-- Made simulator boot idempotent when the target device is already booted.
-- Added screenshot fallback for Xcode 26 (`--type=png`) to improve cross-version reliability.
-- Added accessibility trust caching to reduce repeated permission checks.
-- Improved element matching accuracy with stronger identifier-first scoring.
-- Added strict interaction mode via `IOS_SIM_STRICT_ACTIONS`.
-- Optimized wait loops with monotonic timing and adaptive polling.
-- Added dedicated optimization tests and benchmark script.
+- Fixed `list_installed_apps` parsing for modern `simctl listapps` output by supporting OpenStep plist payloads.
+- Replaced invalid `simctl push/pull` usage with reliable simulator data-path copy for `push_file` and `pull_file`.
+- Normalized `file://` paths and group-container values returned by installed app metadata.
+- Made `reset_app` resilient when the app is already stopped (`found nothing to terminate`), then proceeds with uninstall.
+- Added regression tests for listapps parsing, file roundtrip behavior, simulator path validation, and reset idempotency.
+- Added additional alert fallback behavior tests for non-standard permission dialog accessibility trees.
