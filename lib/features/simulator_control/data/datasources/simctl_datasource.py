@@ -2,12 +2,19 @@
 
 import json
 import os
-import subprocess
 import signal
+import subprocess
+import time
 from datetime import datetime
 from typing import Optional
 
-from lib.core.constants.app_constants import DEFAULT_DEVICE_ID_ENV
+from lib.core.constants.app_constants import (
+    DEFAULT_BOOTED_DEVICE_CACHE_TTL_SECONDS,
+    DEFAULT_DEVICE_ID_ENV,
+    DEFAULT_SIMCTL_RETRY_BACKOFF_SECONDS,
+    DEFAULT_SIMCTL_RETRY_COUNT,
+    DEFAULT_SIMCTL_TIMEOUT_SECONDS,
+)
 from lib.core.errors.app_errors import SimctlError
 from lib.core.utils.result import Result
 
@@ -18,6 +25,33 @@ class SimctlDatasource:
     def __init__(self) -> None:
         self._default_device_id = os.getenv(DEFAULT_DEVICE_ID_ENV)
         self._recording_processes: dict[str, dict[str, object]] = {}
+        self._command_timeout_seconds = float(
+            os.getenv("IOS_SIM_SIMCTL_TIMEOUT_SECONDS", str(DEFAULT_SIMCTL_TIMEOUT_SECONDS))
+        )
+        self._retry_count = max(
+            0,
+            int(os.getenv("IOS_SIM_SIMCTL_RETRY_COUNT", str(DEFAULT_SIMCTL_RETRY_COUNT))),
+        )
+        self._retry_backoff_seconds = max(
+            0.0,
+            float(
+                os.getenv(
+                    "IOS_SIM_SIMCTL_RETRY_BACKOFF_SECONDS",
+                    str(DEFAULT_SIMCTL_RETRY_BACKOFF_SECONDS),
+                )
+            ),
+        )
+        self._booted_cache_ttl_seconds = max(
+            0.0,
+            float(
+                os.getenv(
+                    "IOS_SIM_BOOTED_CACHE_TTL_SECONDS",
+                    str(DEFAULT_BOOTED_DEVICE_CACHE_TTL_SECONDS),
+                )
+            ),
+        )
+        self._booted_cache_timestamp = 0.0
+        self._booted_cache: list[str] = []
 
     def list_simulators(self) -> Result[list[dict]]:
         """Return a list of available simulator devices."""
@@ -80,6 +114,7 @@ class SimctlDatasource:
         udid = self._run_simctl(
             ["create", name.strip(), device_type_id.strip(), runtime_id.strip()]
         ).strip()
+        self._invalidate_booted_cache()
         return Result.success(data={"udid": udid}, message="Simulator created")
 
     def delete_simulator(self, device_id: str) -> Result[None]:
@@ -87,17 +122,20 @@ class SimctlDatasource:
         if not device_id.strip():
             return Result.failure("Device ID must not be empty.")
         self._run_simctl(["delete", device_id.strip()])
+        self._invalidate_booted_cache()
         return Result.success(message="Simulator deleted")
 
     def erase_simulator(self, device_id: Optional[str], all_devices: bool) -> Result[dict]:
         """Erase simulator data for a device or all devices."""
         if all_devices:
             self._run_simctl(["erase", "all"])
+            self._invalidate_booted_cache()
             return Result.success(data={"target": "all"}, message="Simulators erased")
 
         if not device_id or not device_id.strip():
             return Result.failure("Device ID required unless all_devices is true.")
         self._run_simctl(["erase", device_id.strip()])
+        self._invalidate_booted_cache()
         return Result.success(data={"target": device_id.strip()}, message="Simulator erased")
 
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
@@ -284,7 +322,11 @@ class SimctlDatasource:
         """Capture a screenshot and save it to disk."""
         resolved_device = self._resolve_device_id(device_id)
         target_path = self._resolve_output_path(output_path)
-        self._run_simctl(["io", resolved_device, "screenshot", target_path])
+        try:
+            self._run_simctl(["io", resolved_device, "screenshot", target_path])
+        except SimctlError:
+            # Xcode 26 can require explicit image type for file output.
+            self._run_simctl(["io", resolved_device, "screenshot", "--type=png", target_path])
         return Result.success(
             data={"path": target_path, "device_id": resolved_device},
             message="Screenshot saved",
@@ -293,7 +335,13 @@ class SimctlDatasource:
     def boot_simulator(self, device_id: Optional[str]) -> Result[dict]:
         """Boot a simulator device."""
         resolved_device = self._resolve_device_id_for_boot(device_id)
-        self._run_simctl(["boot", resolved_device])
+        try:
+            self._run_simctl(["boot", resolved_device])
+        except SimctlError as error:
+            message = str(error)
+            if "Unable to boot device in current state: Booted" not in message:
+                raise
+        self._invalidate_booted_cache()
         return Result.success(
             data={"device_id": resolved_device},
             message="Simulator booted",
@@ -303,6 +351,7 @@ class SimctlDatasource:
         """Shutdown a simulator device or all booted devices."""
         target = device_id or "booted"
         self._run_simctl(["shutdown", target])
+        self._invalidate_booted_cache()
         return Result.success(
             data={"target": target},
             message="Simulator shutdown",
@@ -391,6 +440,14 @@ class SimctlDatasource:
         return flattened
 
     def _get_booted_devices(self) -> list[str]:
+        now = time.monotonic()
+        if (
+            self._booted_cache_ttl_seconds > 0
+            and self._booted_cache
+            and (now - self._booted_cache_timestamp) < self._booted_cache_ttl_seconds
+        ):
+            return list(self._booted_cache)
+
         output = self._run_simctl(["list", "devices", "booted", "-j"]).strip()
         payload = json.loads(output)
         devices = payload.get("devices", {})
@@ -399,20 +456,70 @@ class SimctlDatasource:
             for item in items:
                 if item.get("state") == "Booted":
                     booted.append(item.get("udid"))
+        self._booted_cache = list(booted)
+        self._booted_cache_timestamp = now
         return booted
 
-    def _run_simctl(self, args: list[str], input_text: Optional[str] = None) -> str:
+    def _invalidate_booted_cache(self) -> None:
+        self._booted_cache_timestamp = 0.0
+        self._booted_cache = []
+
+    def _is_retry_safe(self, args: list[str]) -> bool:
+        if not args:
+            return False
+        return args[0] in {
+            "list",
+            "listapps",
+            "get_app_container",
+            "pbpaste",
+        }
+
+    def _run_simctl(
+        self,
+        args: list[str],
+        input_text: Optional[str] = None,
+        retryable: Optional[bool] = None,
+    ) -> str:
         command = ["xcrun", "simctl", *args]
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            input=input_text,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise SimctlError(result.stderr.strip() or "simctl command failed")
-        return result.stdout
+        allow_retry = self._is_retry_safe(args) if retryable is None else retryable
+        attempts = self._retry_count + 1 if allow_retry else 1
+        last_error = "simctl command failed"
+        last_stdout = ""
+
+        for attempt in range(attempts):
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    input=input_text,
+                    timeout=self._command_timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                last_error = (
+                    f"simctl command timed out after {self._command_timeout_seconds:.1f}s: "
+                    f"{' '.join(command)}"
+                )
+                if attempt == attempts - 1:
+                    raise SimctlError(last_error) from error
+                time.sleep(self._retry_backoff_seconds * (attempt + 1))
+                continue
+
+            last_stdout = result.stdout
+            if result.returncode == 0:
+                return result.stdout
+
+            stderr = (result.stderr or "").strip()
+            last_error = stderr or "simctl command failed"
+            if attempt == attempts - 1:
+                break
+            time.sleep(self._retry_backoff_seconds * (attempt + 1))
+
+        error_message = f"{last_error} (command: {' '.join(command)})"
+        if last_stdout.strip():
+            error_message = f"{error_message}; stdout: {last_stdout.strip()}"
+        raise SimctlError(error_message)
 
     def _resolve_output_path(self, output_path: Optional[str]) -> str:
         if output_path:

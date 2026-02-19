@@ -9,9 +9,11 @@ from collections import deque
 from typing import List, Optional
 
 from lib.core.constants.app_constants import (
+    DEFAULT_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS,
     DEFAULT_GRID_STEP,
     DEFAULT_MAX_DEPTH,
     DEFAULT_MAX_GRID_POINTS,
+    DEFAULT_STRICT_ACTIONS_ENV,
 )
 from lib.core.errors.app_errors import AccessibilityPermissionError, SimulatorNotRunningError
 from lib.core.utils.result import Result
@@ -36,11 +38,27 @@ class AccessibilityDatasource:
         self._grid_step = int(os.getenv("IOS_SIM_GRID_STEP", str(DEFAULT_GRID_STEP)))
         self._max_depth = int(os.getenv("IOS_SIM_MAX_DEPTH", str(DEFAULT_MAX_DEPTH)))
         self._max_grid_points = DEFAULT_MAX_GRID_POINTS
+        self._strict_actions = self._resolve_bool_env(DEFAULT_STRICT_ACTIONS_ENV, False)
+        self._trust_cache_ttl_seconds = float(
+            os.getenv(
+                "IOS_SIM_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS",
+                str(DEFAULT_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS),
+            )
+        )
+        self._last_trust_check_time = 0.0
+        self._last_trust_check_passed = False
         self._element_counter = 0
         self._attribute_cache: dict[int, dict[str, object]] = {}
         self._frame_cache: dict[int, Optional[tuple[float, float, float, float]]] = {}
         self._children_cache: dict[int, list] = {}
         self._actions_cache: dict[int, set] = {}
+
+    @staticmethod
+    def _resolve_bool_env(name: str, default: bool) -> bool:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            return default
+        return raw_value.strip().lower() not in {"0", "false", "no", "off"}
 
     def _reset_caches(self) -> None:
         self._attribute_cache = {}
@@ -76,8 +94,14 @@ class AccessibilityDatasource:
         app_element, window_element = self._process_datasource.get_simulator_window()
         target = self._find_pressable_element_at_position(app_element, window_element, x, y)
         if target is None:
+            if self._strict_actions:
+                return Result.failure(f"No pressable element found at coordinates ({x}, {y}).")
             return Result.success(message="Tap skipped: no element found at coordinates.")
         if not self._perform_press(target):
+            if self._strict_actions:
+                return Result.failure(
+                    f"AXPress not supported for element at coordinates ({x}, {y})."
+                )
             return Result.success(
                 message="Tap skipped: AXPress not supported for element at coordinates."
             )
@@ -161,6 +185,23 @@ class AccessibilityDatasource:
         )
 
     def _ensure_accessibility_permission(self) -> None:
+        now = time.monotonic()
+        if (
+            self._last_trust_check_passed
+            and self._trust_cache_ttl_seconds > 0
+            and (now - self._last_trust_check_time) < self._trust_cache_ttl_seconds
+        ):
+            return
+        is_trusted = self._query_accessibility_trust()
+        self._last_trust_check_time = now
+        self._last_trust_check_passed = is_trusted
+        if is_trusted:
+            return
+        raise AccessibilityPermissionError(
+            "Accessibility permission is required. Enable it in System Settings."
+        )
+
+    def _query_accessibility_trust(self) -> bool:
         try:
             from Quartz import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
         except ImportError:
@@ -170,10 +211,7 @@ class AccessibilityDatasource:
             )
 
         options = {kAXTrustedCheckOptionPrompt: True}
-        if not AXIsProcessTrustedWithOptions(options):
-            raise AccessibilityPermissionError(
-                "Accessibility permission is required. Enable it in System Settings."
-            )
+        return bool(AXIsProcessTrustedWithOptions(options))
 
     def _build_tree(self, app_element, element, visited: set, depth: int) -> UiElementModel:
         if depth > self._max_depth:
@@ -228,6 +266,7 @@ class AccessibilityDatasource:
         queue = deque([root_element])
         visited = set()
         best_match = None
+        best_score = 0
         while queue:
             current = queue.popleft()
             element_key = id(current)
@@ -236,10 +275,12 @@ class AccessibilityDatasource:
             visited.add(element_key)
 
             score = self._match_score(current, identifier_lower)
-            if score == 2:
-                return current
-            if score == 1 and best_match is None:
+            if score > best_score:
+                best_score = score
                 best_match = current
+            elif score > 0 and score == best_score and best_match is not None:
+                if self._is_better_match_candidate(current, best_match):
+                    best_match = current
 
             children = self._get_children(current)
             if not children and self._get_role(current) == "AXGroup":
@@ -252,19 +293,59 @@ class AccessibilityDatasource:
     def _match_score(self, element, identifier_lower: str) -> int:
         if not identifier_lower:
             return 0
-        candidate_values = [
-            self._get_identifier(element),
-            self._get_label(element),
-            self._get_title(element),
-            self._get_value(element),
-        ]
-        for value in candidate_values:
-            if value and identifier_lower == value.lower():
-                return 2
-        for value in candidate_values:
-            if value and identifier_lower in value.lower():
-                return 1
-        return 0
+        values = {
+            "identifier": self._get_identifier(element),
+            "label": self._get_label(element),
+            "title": self._get_title(element),
+            "value": self._get_value(element),
+        }
+
+        best = 0
+        value = values["identifier"]
+        if value:
+            candidate = value.lower()
+            if identifier_lower == candidate:
+                best = max(best, 120)
+            elif candidate.startswith(identifier_lower):
+                best = max(best, 95)
+            elif len(identifier_lower) > 1 and identifier_lower in candidate:
+                best = max(best, 90)
+
+        for key in ("label", "title", "value"):
+            value = values[key]
+            if not value:
+                continue
+            candidate = value.lower()
+            if identifier_lower == candidate:
+                best = max(best, 85)
+            elif candidate.startswith(identifier_lower):
+                best = max(best, 70)
+            elif len(identifier_lower) > 1 and identifier_lower in candidate:
+                best = max(best, 65)
+
+        if best == 0:
+            return 0
+        role = self._get_role(element)
+        if role in {"AXButton", "AXTextField", "AXSearchField", "AXTextArea"}:
+            best += 3
+        return best
+
+    def _is_better_match_candidate(self, candidate, current) -> bool:
+        candidate_identifier = self._get_identifier(candidate)
+        current_identifier = self._get_identifier(current)
+        if candidate_identifier and not current_identifier:
+            return True
+        if current_identifier and not candidate_identifier:
+            return False
+
+        candidate_frame = self._get_frame(candidate)
+        current_frame = self._get_frame(current)
+        if candidate_frame is None or current_frame is None:
+            return candidate_frame is not None
+
+        candidate_area = candidate_frame[2] * candidate_frame[3]
+        current_area = current_frame[2] * current_frame[3]
+        return candidate_area < current_area
 
     def _matches_identifier(self, element, identifier: str) -> bool:
         return self._match_score(element, identifier.lower().strip()) > 0
@@ -781,6 +862,20 @@ class AccessibilityDatasource:
             queue.extend(children)
         return best
 
+    def _window_snapshot_signature(self, window_element) -> str:
+        frame = self._get_frame(window_element)
+        children_count = len(self._get_children(window_element))
+        title = self._get_title(window_element) or ""
+        frame_key = "" if frame is None else f"{frame[0]}:{frame[1]}:{frame[2]}:{frame[3]}"
+        return f"{title}|{children_count}|{frame_key}"
+
+    def _next_poll_interval(self, base: float, stable_iterations: int) -> float:
+        if stable_iterations <= 0:
+            return max(0.05, base)
+        if stable_iterations <= 2:
+            return min(0.6, max(0.05, base) * 1.25)
+        return min(1.0, max(0.05, base) * 1.8)
+
     # =========================================================================
     # WAIT UTILITIES
     # =========================================================================
@@ -798,10 +893,13 @@ class AccessibilityDatasource:
             Result with element info if found, failure if timeout
         """
         self._ensure_accessibility_permission()
-        start_time = time.time()
+        start_time = time.monotonic()
+        deadline = start_time + max(timeout, 0.0)
         poll_interval = self.DEFAULT_POLL_INTERVAL
+        last_signature = None
+        stable_iterations = 0
 
-        while time.time() - start_time < timeout:
+        while time.monotonic() < deadline:
             try:
                 self._reset_caches()
                 app_element, window_element = self._process_datasource.get_simulator_window()
@@ -812,9 +910,18 @@ class AccessibilityDatasource:
                         data=element_info,
                         message=f"Element found: {identifier}"
                     )
+                signature = self._window_snapshot_signature(window_element)
+                if signature == last_signature:
+                    stable_iterations += 1
+                else:
+                    stable_iterations = 0
+                    last_signature = signature
             except Exception as error:
                 self._logger.debug("Error during wait_for_element: %s", error)
-            time.sleep(poll_interval)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(self._next_poll_interval(poll_interval, stable_iterations), remaining))
 
         return Result.failure(f"Timeout waiting for element: {identifier} (after {timeout}s)")
 
@@ -831,19 +938,31 @@ class AccessibilityDatasource:
             Result success if element gone, failure if timeout
         """
         self._ensure_accessibility_permission()
-        start_time = time.time()
+        start_time = time.monotonic()
+        deadline = start_time + max(timeout, 0.0)
         poll_interval = self.DEFAULT_POLL_INTERVAL
+        last_signature = None
+        stable_iterations = 0
 
-        while time.time() - start_time < timeout:
+        while time.monotonic() < deadline:
             try:
                 self._reset_caches()
                 app_element, window_element = self._process_datasource.get_simulator_window()
                 element = self._find_element(app_element, window_element, identifier)
                 if element is None:
                     return Result.success(message=f"Element gone: {identifier}")
+                signature = self._window_snapshot_signature(window_element)
+                if signature == last_signature:
+                    stable_iterations += 1
+                else:
+                    stable_iterations = 0
+                    last_signature = signature
             except Exception as error:
                 self._logger.debug("Error during wait_for_element_gone: %s", error)
-            time.sleep(poll_interval)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(self._next_poll_interval(poll_interval, stable_iterations), remaining))
 
         return Result.failure(f"Timeout waiting for element to disappear: {identifier} (after {timeout}s)")
 
@@ -860,10 +979,13 @@ class AccessibilityDatasource:
             Result with element info containing the text if found
         """
         self._ensure_accessibility_permission()
-        start_time = time.time()
+        start_time = time.monotonic()
+        deadline = start_time + max(timeout, 0.0)
         poll_interval = self.DEFAULT_POLL_INTERVAL
+        last_signature = None
+        stable_iterations = 0
 
-        while time.time() - start_time < timeout:
+        while time.monotonic() < deadline:
             try:
                 self._reset_caches()
                 app_element, window_element = self._process_datasource.get_simulator_window()
@@ -874,9 +996,18 @@ class AccessibilityDatasource:
                         data=element_info,
                         message=f"Text found: {text}"
                     )
+                signature = self._window_snapshot_signature(window_element)
+                if signature == last_signature:
+                    stable_iterations += 1
+                else:
+                    stable_iterations = 0
+                    last_signature = signature
             except Exception as error:
                 self._logger.debug("Error during wait_for_text: %s", error)
-            time.sleep(poll_interval)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(self._next_poll_interval(poll_interval, stable_iterations), remaining))
 
         return Result.failure(f"Timeout waiting for text: {text} (after {timeout}s)")
 
@@ -886,6 +1017,7 @@ class AccessibilityDatasource:
         queue = deque([root_element])
         visited = set()
         best_match = None
+        best_score = 0
 
         while queue:
             current = queue.popleft()
@@ -895,10 +1027,12 @@ class AccessibilityDatasource:
             visited.add(element_key)
 
             score = self._match_text_score(current, text_lower)
-            if score == 2:
-                return current
-            if score == 1 and best_match is None:
+            if score > best_score:
+                best_score = score
                 best_match = current
+            elif score > 0 and score == best_score and best_match is not None:
+                if self._is_better_match_candidate(current, best_match):
+                    best_match = current
 
             children = self._get_children(current)
             if not children and self._get_role(current) == "AXGroup":
@@ -919,10 +1053,10 @@ class AccessibilityDatasource:
         ]
         for value in values:
             if value and text_lower == value.lower():
-                return 2
+                return 100
         for value in values:
-            if value and text_lower in value.lower():
-                return 1
+            if value and len(text_lower) > 1 and text_lower in value.lower():
+                return 70
         return 0
 
     def _get_element_info(self, element) -> dict:
@@ -1128,43 +1262,53 @@ class AccessibilityDatasource:
         self._reset_caches()
         try:
             app_element, window_element = self._process_datasource.get_simulator_window()
-            window_frame = self._get_frame(window_element)
-
-            if window_frame is None:
-                return Result.failure("Could not get simulator window frame")
-
-            # Default to center of window
-            center_x = window_frame[0] + window_frame[2] / 2
-            center_y = window_frame[1] + window_frame[3] / 2
-
-            sx = start_x if start_x is not None else center_x
-            sy = start_y if start_y is not None else center_y
-
-            # Calculate end coordinates based on direction
-            direction_lower = direction.lower()
-            if direction_lower not in {"up", "down", "left", "right"}:
-                return Result.failure(f"Invalid direction: {direction}. Use 'up', 'down', 'left', or 'right'")
-
-            probe_points = [(sx, sy)]
-            probe_points.append((center_x, window_frame[1] + window_frame[3] * 0.4))
-            probe_points.append((center_x, window_frame[1] + window_frame[3] * 0.6))
-
-            for probe_x, probe_y in probe_points:
-                target = self._find_scrollable_element(
-                    app_element, window_element, probe_x, probe_y, direction_lower
-                )
-                if target is not None and self._perform_scroll_action(target, direction_lower):
-                    return Result.success(message=f"Swiped {direction} via AX scroll action")
-
-            if self._perform_scroll_action(window_element, direction_lower):
-                return Result.success(message=f"Swiped {direction} via AX scroll action")
-            if self._perform_scroll_action(app_element, direction_lower):
-                return Result.success(message=f"Swiped {direction} via AX scroll action")
-            return Result.success(
-                message="Swipe skipped: no AX scroll actions available."
-            )
+            return self._swipe_internal(app_element, window_element, direction, start_x, start_y)
         except Exception as error:
             return Result.failure(str(error))
+
+    def _swipe_internal(
+        self,
+        app_element,
+        window_element,
+        direction: str,
+        start_x: Optional[float] = None,
+        start_y: Optional[float] = None,
+    ) -> Result[None]:
+        window_frame = self._get_frame(window_element)
+        if window_frame is None:
+            return Result.failure("Could not get simulator window frame")
+
+        center_x = window_frame[0] + window_frame[2] / 2
+        center_y = window_frame[1] + window_frame[3] / 2
+        sx = start_x if start_x is not None else center_x
+        sy = start_y if start_y is not None else center_y
+
+        direction_lower = direction.lower()
+        if direction_lower not in {"up", "down", "left", "right"}:
+            return Result.failure(
+                f"Invalid direction: {direction}. Use 'up', 'down', 'left', or 'right'"
+            )
+
+        probe_points = [
+            (sx, sy),
+            (center_x, window_frame[1] + window_frame[3] * 0.4),
+            (center_x, window_frame[1] + window_frame[3] * 0.6),
+        ]
+
+        for probe_x, probe_y in probe_points:
+            target = self._find_scrollable_element(
+                app_element, window_element, probe_x, probe_y, direction_lower
+            )
+            if target is not None and self._perform_scroll_action(target, direction_lower):
+                return Result.success(message=f"Swiped {direction} via AX scroll action")
+
+        if self._perform_scroll_action(window_element, direction_lower):
+            return Result.success(message=f"Swiped {direction} via AX scroll action")
+        if self._perform_scroll_action(app_element, direction_lower):
+            return Result.success(message=f"Swiped {direction} via AX scroll action")
+        if self._strict_actions:
+            return Result.failure("No AX scroll actions available for swipe.")
+        return Result.success(message="Swipe skipped: no AX scroll actions available.")
 
     def scroll_to_element(
         self,
@@ -1184,6 +1328,11 @@ class AccessibilityDatasource:
         """
         self._ensure_accessibility_permission()
         self._reset_caches()
+        direction_lower = direction.lower()
+        if max_scrolls < 0:
+            return Result.failure("max_scrolls must be >= 0")
+        if direction_lower not in {"down", "up"}:
+            return Result.failure("direction must be 'down' or 'up'")
 
         for i in range(max_scrolls):
             try:
@@ -1199,9 +1348,10 @@ class AccessibilityDatasource:
                     )
 
                 # Scroll in the specified direction
-                scroll_result = self.swipe(
-                    direction="up" if direction == "down" else "down",
-                    distance=250.0
+                scroll_result = self._swipe_internal(
+                    app_element,
+                    window_element,
+                    direction="up" if direction_lower == "down" else "down",
                 )
                 if not scroll_result.is_success:
                     return Result.failure(f"Scroll failed: {scroll_result.message}")
@@ -1232,8 +1382,12 @@ class AccessibilityDatasource:
             app_element, window_element = self._process_datasource.get_simulator_window()
             element = self._find_element(app_element, window_element, identifier)
             if element is None:
+                if self._strict_actions:
+                    return Result.failure(f"Element not found for long press: {identifier}")
                 return Result.success(message=f"Long press skipped: element not found: {identifier}")
             if not self._perform_press(element):
+                if self._strict_actions:
+                    return Result.failure(f"AXPress not supported for long press: {identifier}")
                 return Result.success(
                     message=f"Long press skipped: AXPress not supported: {identifier}"
                 )
@@ -1264,8 +1418,14 @@ class AccessibilityDatasource:
             app_element, window_element = self._process_datasource.get_simulator_window()
             target = self._find_pressable_element_at_position(app_element, window_element, x, y)
             if target is None:
+                if self._strict_actions:
+                    return Result.failure(f"No element found for long press at ({x}, {y}).")
                 return Result.success(message="Long press skipped: no element at coordinates.")
             if not self._perform_press(target):
+                if self._strict_actions:
+                    return Result.failure(
+                        f"AXPress not supported for long press at ({x}, {y})."
+                    )
                 return Result.success(
                     message="Long press skipped: AXPress not supported at coordinates."
                 )
