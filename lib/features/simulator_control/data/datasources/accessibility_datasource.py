@@ -134,11 +134,32 @@ class AccessibilityDatasource:
             app_element, window_element = self._process_datasource.get_simulator_window()
             alert_root = self._find_alert_container(window_element, app_element)
             if alert_root is None:
+                fallback_buttons = self._filter_prompt_buttons(
+                    self._find_buttons_fast(window_element),
+                    window_element,
+                )
+                if fallback_buttons:
+                    selected = self._select_alert_button(fallback_buttons, action_lower)
+                    if selected is not None and self._perform_press(selected["element"]):
+                        time.sleep(0.2)
+                        continue
+                    if self._tap_alert_by_keyboard(action_lower):
+                        time.sleep(0.2)
+                        continue
+                tapped_without_alert_role = self._tap_alert_by_coordinates(
+                    app_element,
+                    window_element,
+                    action_lower,
+                )
+                if tapped_without_alert_role:
+                    time.sleep(0.2)
+                    continue
                 if attempt == 0:
                     return Result.failure("No alert detected.")
                 return Result.success(message="Alert dismissed")
 
             buttons = self._find_buttons(alert_root, app_element)
+
             tapped = False
             if buttons:
                 selected = self._select_alert_button(buttons, action_lower)
@@ -723,10 +744,12 @@ class AccessibilityDatasource:
             time.sleep(0.01)
 
     def _find_alert_container(self, root_element, app_element):
-        queue = deque([root_element])
+        queue = deque([(root_element, 0)])
         visited = set()
         while queue:
-            element = queue.popleft()
+            element, depth = queue.popleft()
+            if depth > self._max_depth:
+                continue
             element_key = id(element)
             if element_key in visited:
                 continue
@@ -743,15 +766,17 @@ class AccessibilityDatasource:
                 frame = self._get_frame(element)
                 if frame is not None:
                     children = self._grid_scan_children(app_element, element, frame)
-            queue.extend(children)
+            queue.extend((child, depth + 1) for child in children)
         return None
 
     def _find_buttons(self, root_element, app_element) -> list[dict]:
-        queue = deque([root_element])
+        queue = deque([(root_element, 0)])
         visited = set()
         buttons = []
         while queue:
-            element = queue.popleft()
+            element, depth = queue.popleft()
+            if depth > self._max_depth:
+                continue
             element_key = id(element)
             if element_key in visited:
                 continue
@@ -773,8 +798,65 @@ class AccessibilityDatasource:
                 frame = self._get_frame(element)
                 if frame is not None:
                     children = self._grid_scan_children(app_element, element, frame)
-            queue.extend(children)
+            queue.extend((child, depth + 1) for child in children)
         return buttons
+
+    def _find_buttons_fast(self, root_element) -> list[dict]:
+        """Collect button-like nodes without expensive grid scanning."""
+        queue = deque([(root_element, 0)])
+        visited = set()
+        buttons = []
+        max_depth = min(self._max_depth, 12)
+        while queue:
+            element, depth = queue.popleft()
+            if depth > max_depth:
+                continue
+            element_key = id(element)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+            role = self._get_role(element) or ""
+            if role == "AXButton":
+                buttons.append(
+                    {
+                        "element": element,
+                        "title": self._get_title(element),
+                        "label": self._get_label(element),
+                        "identifier": self._get_identifier(element),
+                        "value": self._get_value(element),
+                        "frame": self._get_frame(element),
+                    }
+                )
+            children = self._get_children(element)
+            queue.extend((child, depth + 1) for child in children)
+        return buttons
+
+    def _filter_prompt_buttons(self, buttons: list[dict], window_element) -> list[dict]:
+        window_frame = self._get_frame(window_element)
+        if window_frame is None:
+            return []
+
+        window_x, window_y, window_w, window_h = window_frame
+        min_width = max(80.0, window_w * 0.18)
+        min_height = max(28.0, window_h * 0.03)
+        candidates = []
+
+        for button in buttons:
+            frame = button.get("frame")
+            if frame is None:
+                continue
+            x, y, width, height = frame
+            if width < min_width or height < min_height:
+                continue
+            center_x = x + (width / 2.0)
+            center_y = y + (height / 2.0)
+            if center_x < (window_x + window_w * 0.18) or center_x > (window_x + window_w * 0.82):
+                continue
+            if center_y < (window_y + window_h * 0.25) or center_y > (window_y + window_h * 0.95):
+                continue
+            candidates.append(button)
+
+        return candidates
 
     def _select_alert_button(self, buttons: list[dict], action: str) -> Optional[dict]:
         allow_labels = {
@@ -814,6 +896,16 @@ class AccessibilityDatasource:
         # Fallback: choose by x position (rightmost for allow, leftmost for deny)
         framed = [btn for btn in buttons if btn.get("frame") is not None]
         if framed:
+            x_centers = [btn["frame"][0] + (btn["frame"][2] / 2.0) for btn in framed]
+            y_centers = [btn["frame"][1] + (btn["frame"][3] / 2.0) for btn in framed]
+            x_span = max(x_centers) - min(x_centers)
+            y_span = max(y_centers) - min(y_centers)
+
+            # Vertical action sheets often expose no labels in AX; prefer top for allow.
+            if y_span > x_span * 1.2:
+                framed.sort(key=lambda btn: btn["frame"][1])
+                return framed[0] if action == "allow" else framed[-1]
+
             framed.sort(key=lambda btn: btn["frame"][0])
             return framed[-1] if action == "allow" else framed[0]
         return buttons[0] if action == "allow" else buttons[-1]
@@ -840,6 +932,58 @@ class AccessibilityDatasource:
                 time.sleep(0.05)
 
         return False
+
+    def _tap_alert_by_keyboard(self, action: str) -> bool:
+        """Fallback for dialogs that expose no pressable AX button actions."""
+        if action == "allow":
+            sequences = [[36], [76], [49]]
+        else:
+            sequences = [[53], [48, 36], [123, 36], [124, 36]]
+        for sequence in sequences:
+            if all(self._press_key(key_code) for key_code in sequence):
+                return True
+        return False
+
+    def _press_key(self, key_code: int) -> bool:
+        try:
+            from Quartz import (
+                CGEventCreateKeyboardEvent,
+                CGEventPost,
+                CGEventPostToPid,
+                kCGHIDEventTap,
+            )
+        except ImportError:
+            from ApplicationServices import (
+                CGEventCreateKeyboardEvent,
+                CGEventPost,
+                CGEventPostToPid,
+                kCGHIDEventTap,
+            )
+
+        try:
+            key_down = CGEventCreateKeyboardEvent(None, key_code, True)
+            key_up = CGEventCreateKeyboardEvent(None, key_code, False)
+            if key_down is None or key_up is None:
+                return False
+            pid = None
+            try:
+                app, _ = self._process_datasource.get_simulator_application()
+                pid = int(app.processIdentifier())
+            except Exception:
+                pid = None
+
+            if pid is not None and pid > 0:
+                CGEventPostToPid(pid, key_down)
+                time.sleep(0.01)
+                CGEventPostToPid(pid, key_up)
+            else:
+                CGEventPost(kCGHIDEventTap, key_down)
+                time.sleep(0.01)
+                CGEventPost(kCGHIDEventTap, key_up)
+            return True
+        except Exception as error:
+            self._logger.debug("Keyboard fallback failed for key %s: %s", key_code, error)
+            return False
 
     def _get_largest_group_frame(
         self, window_element
