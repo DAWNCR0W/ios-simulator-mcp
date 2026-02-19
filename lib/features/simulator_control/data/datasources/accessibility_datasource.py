@@ -31,6 +31,7 @@ class AccessibilityDatasource:
     DEFAULT_TIMEOUT = 10.0
     DEFAULT_POLL_INTERVAL = 0.5
     DEFAULT_RETRY_COUNT = 3
+    DEFAULT_ALERT_HANDLE_TIMEOUT_SECONDS = 8.0
 
     def __init__(self, process_datasource: SimulatorProcessDatasource) -> None:
         self._process_datasource = process_datasource
@@ -44,6 +45,15 @@ class AccessibilityDatasource:
                 "IOS_SIM_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS",
                 str(DEFAULT_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS),
             )
+        )
+        self._alert_handle_timeout_seconds = max(
+            0.5,
+            float(
+                os.getenv(
+                    "IOS_SIM_ALERT_TIMEOUT_SECONDS",
+                    str(self.DEFAULT_ALERT_HANDLE_TIMEOUT_SECONDS),
+                )
+            ),
         )
         self._last_trust_check_time = 0.0
         self._last_trust_check_passed = False
@@ -129,10 +139,13 @@ class AccessibilityDatasource:
         if action_lower not in {"allow", "deny"}:
             return Result.failure("Action must be 'allow' or 'deny'.")
 
+        deadline = time.monotonic() + self._alert_handle_timeout_seconds
         for attempt in range(self.DEFAULT_RETRY_COUNT + 1):
+            if time.monotonic() > deadline:
+                return Result.failure("Timed out while handling permission alert.")
             self._reset_caches()
             app_element, window_element = self._process_datasource.get_simulator_window()
-            alert_root = self._find_alert_container(window_element, app_element)
+            alert_root = self._find_alert_container(window_element, app_element, deadline=deadline)
             if alert_root is None:
                 fallback_buttons = self._filter_prompt_buttons(
                     self._find_buttons_fast(window_element),
@@ -158,7 +171,7 @@ class AccessibilityDatasource:
                     return Result.failure("No alert detected.")
                 return Result.success(message="Alert dismissed")
 
-            buttons = self._find_buttons(alert_root, app_element)
+            buttons = self._find_buttons(alert_root, app_element, deadline=deadline)
 
             tapped = False
             if buttons:
@@ -179,7 +192,7 @@ class AccessibilityDatasource:
             time.sleep(0.2)
 
         app_element, window_element = self._process_datasource.get_simulator_window()
-        if self._find_alert_container(window_element, app_element) is None:
+        if self._find_alert_container(window_element, app_element, deadline=deadline) is None:
             return Result.success(message="Alert dismissed")
         return Result.failure("Alert still visible after retries.")
 
@@ -743,12 +756,15 @@ class AccessibilityDatasource:
             CGEventPost(kCGHIDEventTap, key_up)
             time.sleep(0.01)
 
-    def _find_alert_container(self, root_element, app_element):
+    def _find_alert_container(self, root_element, app_element, deadline: Optional[float] = None):
         queue = deque([(root_element, 0)])
         visited = set()
+        max_depth = min(self._max_depth, 16)
         while queue:
+            if deadline is not None and time.monotonic() > deadline:
+                return None
             element, depth = queue.popleft()
-            if depth > self._max_depth:
+            if depth > max_depth:
                 continue
             element_key = id(element)
             if element_key in visited:
@@ -769,13 +785,18 @@ class AccessibilityDatasource:
             queue.extend((child, depth + 1) for child in children)
         return None
 
-    def _find_buttons(self, root_element, app_element) -> list[dict]:
+    def _find_buttons(
+        self, root_element, app_element, deadline: Optional[float] = None
+    ) -> list[dict]:
         queue = deque([(root_element, 0)])
         visited = set()
         buttons = []
+        max_depth = min(self._max_depth, 16)
         while queue:
+            if deadline is not None and time.monotonic() > deadline:
+                return buttons
             element, depth = queue.popleft()
-            if depth > self._max_depth:
+            if depth > max_depth:
                 continue
             element_key = id(element)
             if element_key in visited:
