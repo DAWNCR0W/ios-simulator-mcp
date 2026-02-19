@@ -2,12 +2,21 @@
 
 import json
 import os
-import subprocess
+import shutil
 import signal
+import subprocess
+import time
 from datetime import datetime
 from typing import Optional
+from urllib.parse import unquote, urlparse
 
-from lib.core.constants.app_constants import DEFAULT_DEVICE_ID_ENV
+from lib.core.constants.app_constants import (
+    DEFAULT_BOOTED_DEVICE_CACHE_TTL_SECONDS,
+    DEFAULT_DEVICE_ID_ENV,
+    DEFAULT_SIMCTL_RETRY_BACKOFF_SECONDS,
+    DEFAULT_SIMCTL_RETRY_COUNT,
+    DEFAULT_SIMCTL_TIMEOUT_SECONDS,
+)
 from lib.core.errors.app_errors import SimctlError
 from lib.core.utils.result import Result
 
@@ -18,6 +27,33 @@ class SimctlDatasource:
     def __init__(self) -> None:
         self._default_device_id = os.getenv(DEFAULT_DEVICE_ID_ENV)
         self._recording_processes: dict[str, dict[str, object]] = {}
+        self._command_timeout_seconds = float(
+            os.getenv("IOS_SIM_SIMCTL_TIMEOUT_SECONDS", str(DEFAULT_SIMCTL_TIMEOUT_SECONDS))
+        )
+        self._retry_count = max(
+            0,
+            int(os.getenv("IOS_SIM_SIMCTL_RETRY_COUNT", str(DEFAULT_SIMCTL_RETRY_COUNT))),
+        )
+        self._retry_backoff_seconds = max(
+            0.0,
+            float(
+                os.getenv(
+                    "IOS_SIM_SIMCTL_RETRY_BACKOFF_SECONDS",
+                    str(DEFAULT_SIMCTL_RETRY_BACKOFF_SECONDS),
+                )
+            ),
+        )
+        self._booted_cache_ttl_seconds = max(
+            0.0,
+            float(
+                os.getenv(
+                    "IOS_SIM_BOOTED_CACHE_TTL_SECONDS",
+                    str(DEFAULT_BOOTED_DEVICE_CACHE_TTL_SECONDS),
+                )
+            ),
+        )
+        self._booted_cache_timestamp = 0.0
+        self._booted_cache: list[str] = []
 
     def list_simulators(self) -> Result[list[dict]]:
         """Return a list of available simulator devices."""
@@ -80,6 +116,7 @@ class SimctlDatasource:
         udid = self._run_simctl(
             ["create", name.strip(), device_type_id.strip(), runtime_id.strip()]
         ).strip()
+        self._invalidate_booted_cache()
         return Result.success(data={"udid": udid}, message="Simulator created")
 
     def delete_simulator(self, device_id: str) -> Result[None]:
@@ -87,36 +124,51 @@ class SimctlDatasource:
         if not device_id.strip():
             return Result.failure("Device ID must not be empty.")
         self._run_simctl(["delete", device_id.strip()])
+        self._invalidate_booted_cache()
         return Result.success(message="Simulator deleted")
 
     def erase_simulator(self, device_id: Optional[str], all_devices: bool) -> Result[dict]:
         """Erase simulator data for a device or all devices."""
         if all_devices:
             self._run_simctl(["erase", "all"])
+            self._invalidate_booted_cache()
             return Result.success(data={"target": "all"}, message="Simulators erased")
 
         if not device_id or not device_id.strip():
             return Result.failure("Device ID required unless all_devices is true.")
         self._run_simctl(["erase", device_id.strip()])
+        self._invalidate_booted_cache()
         return Result.success(data={"target": device_id.strip()}, message="Simulator erased")
 
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         """Return a list of installed apps on the simulator."""
         try:
             resolved_device = self._resolve_device_id(device_id)
-            output = self._run_simctl(["listapps", resolved_device, "-j"]).strip()
-            payload = json.loads(output)
-            apps = payload.get("apps", {})
+            output = self._run_simctl(["listapps", resolved_device]).strip()
+            apps = self._extract_listapps_apps(output)
             flattened = []
             for bundle_id, info in apps.items():
+                group_containers = self._normalize_group_containers(
+                    info.get("groupContainers") or info.get("GroupContainers")
+                )
                 flattened.append(
                     {
                         "bundle_id": bundle_id,
-                        "bundle_name": info.get("bundleName"),
-                        "bundle_path": info.get("bundlePath"),
-                        "app_container": info.get("appContainer"),
-                        "data_container": info.get("dataContainer"),
-                        "group_containers": info.get("groupContainers"),
+                        "bundle_name": (
+                            info.get("bundleName")
+                            or info.get("CFBundleName")
+                            or info.get("CFBundleDisplayName")
+                        ),
+                        "bundle_path": self._normalize_file_url(
+                            info.get("bundlePath") or info.get("Path") or info.get("Bundle")
+                        ),
+                        "app_container": self._normalize_file_url(
+                            info.get("appContainer") or info.get("AppContainer")
+                        ),
+                        "data_container": self._normalize_file_url(
+                            info.get("dataContainer") or info.get("DataContainer")
+                        ),
+                        "group_containers": group_containers,
                     }
                 )
             return Result.success(data=flattened, message="Apps listed")
@@ -147,12 +199,30 @@ class SimctlDatasource:
             return Result.failure("Source path must not be empty.")
         if not destination_path.strip():
             return Result.failure("Destination path must not be empty.")
-        resolved_device = self._resolve_device_id(device_id)
-        resolved_source = os.path.expanduser(source_path)
-        if not os.path.exists(resolved_source):
-            return Result.failure(f"Source path not found: {resolved_source}")
-        self._run_simctl(["push", resolved_device, resolved_source, destination_path.strip()])
-        return Result.success(message="File pushed")
+        try:
+            resolved_device = self._resolve_device_id(device_id)
+            resolved_source = os.path.expanduser(source_path)
+            if not os.path.exists(resolved_source):
+                return Result.failure(f"Source path not found: {resolved_source}")
+            resolved_destination = self._resolve_simulator_data_path(
+                resolved_device, destination_path.strip()
+            )
+            destination_dir = os.path.dirname(resolved_destination)
+            if destination_dir:
+                os.makedirs(destination_dir, exist_ok=True)
+
+            if os.path.isdir(resolved_source):
+                if os.path.exists(resolved_destination):
+                    if os.path.isdir(resolved_destination):
+                        shutil.rmtree(resolved_destination)
+                    else:
+                        os.remove(resolved_destination)
+                shutil.copytree(resolved_source, resolved_destination)
+            else:
+                shutil.copy2(resolved_source, resolved_destination)
+            return Result.success(message="File pushed")
+        except (OSError, SimctlError) as error:
+            return Result.failure(str(error))
 
     def pull_file(
         self, source_path: str, destination_path: str, device_id: Optional[str]
@@ -162,13 +232,28 @@ class SimctlDatasource:
             return Result.failure("Source path must not be empty.")
         if not destination_path.strip():
             return Result.failure("Destination path must not be empty.")
-        resolved_device = self._resolve_device_id(device_id)
-        resolved_destination = os.path.expanduser(destination_path)
-        destination_dir = os.path.dirname(resolved_destination)
-        if destination_dir:
-            os.makedirs(destination_dir, exist_ok=True)
-        self._run_simctl(["pull", resolved_device, source_path.strip(), resolved_destination])
-        return Result.success(message="File pulled")
+        try:
+            resolved_device = self._resolve_device_id(device_id)
+            resolved_source = self._resolve_simulator_data_path(resolved_device, source_path.strip())
+            if not os.path.exists(resolved_source):
+                return Result.failure(f"Source path not found on simulator: {source_path.strip()}")
+            resolved_destination = os.path.expanduser(destination_path)
+
+            if os.path.isdir(resolved_source):
+                if os.path.exists(resolved_destination):
+                    if os.path.isdir(resolved_destination):
+                        shutil.rmtree(resolved_destination)
+                    else:
+                        os.remove(resolved_destination)
+                shutil.copytree(resolved_source, resolved_destination)
+            else:
+                destination_dir = os.path.dirname(resolved_destination)
+                if destination_dir:
+                    os.makedirs(destination_dir, exist_ok=True)
+                shutil.copy2(resolved_source, resolved_destination)
+            return Result.success(message="File pulled")
+        except (OSError, SimctlError) as error:
+            return Result.failure(str(error))
 
     def set_privacy(
         self,
@@ -274,7 +359,12 @@ class SimctlDatasource:
     def reset_app(self, bundle_id: str, device_id: Optional[str]) -> Result[None]:
         """Terminate and uninstall an app from the simulator."""
         resolved_device = self._resolve_device_id(device_id)
-        self._run_simctl(["terminate", resolved_device, bundle_id])
+        try:
+            self._run_simctl(["terminate", resolved_device, bundle_id])
+        except SimctlError as error:
+            message = str(error).lower()
+            if "found nothing to terminate" not in message:
+                return Result.failure(str(error))
         self._run_simctl(["uninstall", resolved_device, bundle_id])
         return Result.success(message="App reset (uninstalled)")
 
@@ -284,7 +374,11 @@ class SimctlDatasource:
         """Capture a screenshot and save it to disk."""
         resolved_device = self._resolve_device_id(device_id)
         target_path = self._resolve_output_path(output_path)
-        self._run_simctl(["io", resolved_device, "screenshot", target_path])
+        try:
+            self._run_simctl(["io", resolved_device, "screenshot", target_path])
+        except SimctlError:
+            # Xcode 26 can require explicit image type for file output.
+            self._run_simctl(["io", resolved_device, "screenshot", "--type=png", target_path])
         return Result.success(
             data={"path": target_path, "device_id": resolved_device},
             message="Screenshot saved",
@@ -293,7 +387,13 @@ class SimctlDatasource:
     def boot_simulator(self, device_id: Optional[str]) -> Result[dict]:
         """Boot a simulator device."""
         resolved_device = self._resolve_device_id_for_boot(device_id)
-        self._run_simctl(["boot", resolved_device])
+        try:
+            self._run_simctl(["boot", resolved_device])
+        except SimctlError as error:
+            message = str(error)
+            if "Unable to boot device in current state: Booted" not in message:
+                raise
+        self._invalidate_booted_cache()
         return Result.success(
             data={"device_id": resolved_device},
             message="Simulator booted",
@@ -303,6 +403,7 @@ class SimctlDatasource:
         """Shutdown a simulator device or all booted devices."""
         target = device_id or "booted"
         self._run_simctl(["shutdown", target])
+        self._invalidate_booted_cache()
         return Result.success(
             data={"target": target},
             message="Simulator shutdown",
@@ -391,6 +492,14 @@ class SimctlDatasource:
         return flattened
 
     def _get_booted_devices(self) -> list[str]:
+        now = time.monotonic()
+        if (
+            self._booted_cache_ttl_seconds > 0
+            and self._booted_cache
+            and (now - self._booted_cache_timestamp) < self._booted_cache_ttl_seconds
+        ):
+            return list(self._booted_cache)
+
         output = self._run_simctl(["list", "devices", "booted", "-j"]).strip()
         payload = json.loads(output)
         devices = payload.get("devices", {})
@@ -399,20 +508,157 @@ class SimctlDatasource:
             for item in items:
                 if item.get("state") == "Booted":
                     booted.append(item.get("udid"))
+        self._booted_cache = list(booted)
+        self._booted_cache_timestamp = now
         return booted
 
-    def _run_simctl(self, args: list[str], input_text: Optional[str] = None) -> str:
-        command = ["xcrun", "simctl", *args]
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            input=input_text,
-            check=False,
-        )
+    def _invalidate_booted_cache(self) -> None:
+        self._booted_cache_timestamp = 0.0
+        self._booted_cache = []
+
+    def _extract_listapps_apps(self, raw_output: str) -> dict[str, dict]:
+        payload = self._parse_listapps_payload(raw_output)
+        if "apps" in payload and isinstance(payload.get("apps"), dict):
+            return payload["apps"]
+        if all(isinstance(value, dict) for value in payload.values()):
+            return payload
+        raise SimctlError("Unexpected simctl listapps output format.")
+
+    def _parse_listapps_payload(self, raw_output: str) -> dict:
+        if not raw_output:
+            return {}
+        try:
+            parsed = json.loads(raw_output)
+            if isinstance(parsed, dict):
+                return parsed
+            raise SimctlError("Unexpected simctl listapps output format.")
+        except json.JSONDecodeError:
+            return self._convert_openstep_plist_to_json(raw_output)
+
+    def _convert_openstep_plist_to_json(self, raw_output: str) -> dict:
+        command = ["plutil", "-convert", "json", "-o", "-", "-"]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                input=raw_output,
+                timeout=self._command_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise SimctlError("Timed out while parsing simctl listapps output.") from error
+
         if result.returncode != 0:
-            raise SimctlError(result.stderr.strip() or "simctl command failed")
-        return result.stdout
+            stderr = (result.stderr or "").strip() or "plutil conversion failed"
+            raise SimctlError(f"Failed to parse simctl listapps output: {stderr}")
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise SimctlError("Failed to parse simctl listapps JSON payload.") from error
+        if not isinstance(parsed, dict):
+            raise SimctlError("Unexpected simctl listapps payload type.")
+        return parsed
+
+    def _normalize_file_url(self, path_value: Optional[str]) -> Optional[str]:
+        if not isinstance(path_value, str):
+            return path_value
+        if not path_value.startswith("file://"):
+            return path_value
+        parsed = urlparse(path_value)
+        normalized = unquote(parsed.path)
+        if normalized != "/" and normalized.endswith("/"):
+            return normalized[:-1]
+        return normalized
+
+    def _normalize_group_containers(
+        self, group_containers: Optional[dict]
+    ) -> Optional[dict[str, str]]:
+        if not isinstance(group_containers, dict):
+            return None
+        normalized: dict[str, str] = {}
+        for key, value in group_containers.items():
+            if not isinstance(key, str):
+                continue
+            normalized[key] = self._normalize_file_url(value) if isinstance(value, str) else value
+        return normalized
+
+    def _resolve_simulator_data_path(self, device_id: str, simulator_path: str) -> str:
+        normalized_path = os.path.normpath(simulator_path.strip())
+        if not normalized_path.startswith("/"):
+            raise SimctlError("Simulator path must be absolute (for example: /tmp/file.txt).")
+        if normalized_path == "/":
+            raise SimctlError("Simulator path must not be root (/).")
+
+        simulator_data_root = os.path.normpath(
+            os.path.expanduser(f"~/Library/Developer/CoreSimulator/Devices/{device_id}/data")
+        )
+        if not os.path.isdir(simulator_data_root):
+            raise SimctlError(f"Simulator data path not found for device: {device_id}")
+
+        host_path = os.path.normpath(
+            os.path.join(simulator_data_root, normalized_path.lstrip("/"))
+        )
+        if os.path.commonpath([simulator_data_root, host_path]) != simulator_data_root:
+            raise SimctlError("Simulator path escapes the simulator data directory.")
+        return host_path
+
+    def _is_retry_safe(self, args: list[str]) -> bool:
+        if not args:
+            return False
+        return args[0] in {
+            "list",
+            "listapps",
+            "get_app_container",
+            "pbpaste",
+        }
+
+    def _run_simctl(
+        self,
+        args: list[str],
+        input_text: Optional[str] = None,
+        retryable: Optional[bool] = None,
+    ) -> str:
+        command = ["xcrun", "simctl", *args]
+        allow_retry = self._is_retry_safe(args) if retryable is None else retryable
+        attempts = self._retry_count + 1 if allow_retry else 1
+        last_error = "simctl command failed"
+        last_stdout = ""
+
+        for attempt in range(attempts):
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    input=input_text,
+                    timeout=self._command_timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                last_error = (
+                    f"simctl command timed out after {self._command_timeout_seconds:.1f}s: "
+                    f"{' '.join(command)}"
+                )
+                if attempt == attempts - 1:
+                    raise SimctlError(last_error) from error
+                time.sleep(self._retry_backoff_seconds * (attempt + 1))
+                continue
+
+            last_stdout = result.stdout
+            if result.returncode == 0:
+                return result.stdout
+
+            stderr = (result.stderr or "").strip()
+            last_error = stderr or "simctl command failed"
+            if attempt == attempts - 1:
+                break
+            time.sleep(self._retry_backoff_seconds * (attempt + 1))
+
+        error_message = f"{last_error} (command: {' '.join(command)})"
+        if last_stdout.strip():
+            error_message = f"{error_message}; stdout: {last_stdout.strip()}"
+        raise SimctlError(error_message)
 
     def _resolve_output_path(self, output_path: Optional[str]) -> str:
         if output_path:
