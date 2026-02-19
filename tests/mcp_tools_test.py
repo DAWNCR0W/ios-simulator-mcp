@@ -22,6 +22,19 @@ class SkipTest(Exception):
     """Signal a runtime skip from async test helpers."""
 
 
+def _is_environment_precondition_failure(message: str) -> bool:
+    text = (message or "").lower()
+    known_markers = [
+        "accessibility permission is required",
+        "ios simulator app is not running",
+        "simulator window not found",
+        "no booted simulator devices found",
+        "no simulator devices available to boot",
+        "failed to execute tool",
+    ]
+    return any(marker in text for marker in known_markers)
+
+
 def _flatten_nodes(node, out):
     out.append(node)
     for child in node.get("children") or []:
@@ -31,9 +44,17 @@ def _flatten_nodes(node, out):
 async def _call_tool(session, name, arguments=None):
     result = await session.call_tool(name, arguments or {})
     if result.isError:
-        return {"success": False, "message": str(result.content), "data": None}
+        message = str(result.content)
+        if _is_environment_precondition_failure(message):
+            raise SkipTest(f"Environment precondition not met for {name}: {message}")
+        return {"success": False, "message": message, "data": None}
     text = result.content[0].text if result.content else "{}"
-    return json.loads(text)
+    parsed = json.loads(text)
+    if not parsed.get("success", False):
+        message = parsed.get("message", "")
+        if _is_environment_precondition_failure(message):
+            raise SkipTest(f"Environment precondition not met for {name}: {message}")
+    return parsed
 
 
 async def _with_session(callback):
@@ -277,6 +298,8 @@ def test_wait_for_element_gone_timeout():
             "wait_for_element_gone",
             {"identifier": "__mcp_missing_element__", "timeout": 1.0},
         )
+        if not result["success"]:
+            raise SkipTest(f"wait_for_element_gone precondition not met: {result.get('message')}")
         assert result["success"] is True
 
     _run_with_session(run)

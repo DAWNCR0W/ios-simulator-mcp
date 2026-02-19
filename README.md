@@ -61,6 +61,20 @@ wait utilities, gestures, assertions, and screenshots.
 2. Add your terminal app (Terminal/iTerm2) or the Python executable
 3. Enable the toggle
 
+### Performance and Reliability Tuning
+
+These environment variables are optional, and can be used to tune latency and behavior:
+
+- `IOS_SIM_SIMCTL_TIMEOUT_SECONDS` (default: `12.0`)
+- `IOS_SIM_SIMCTL_RETRY_COUNT` (default: `1`, read-only commands only)
+- `IOS_SIM_SIMCTL_RETRY_BACKOFF_SECONDS` (default: `0.15`)
+- `IOS_SIM_BOOTED_CACHE_TTL_SECONDS` (default: `0.4`)
+- `IOS_SIM_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS` (default: `2.0`)
+- `IOS_SIM_STRICT_ACTIONS` (default: `false`)
+
+When `IOS_SIM_STRICT_ACTIONS=true`, coordinate and long-press actions fail explicitly instead
+of returning a skipped success when no pressable target exists.
+
 ## Installation
 
 ### Homebrew
@@ -102,6 +116,14 @@ open -a Simulator
 
 ```bash
 ios-simulator-mcp --transport stdio
+```
+
+### Optional Benchmark
+
+Run a quick local benchmark for core read-only operations:
+
+```bash
+PYTHONPATH=. python scripts/benchmark.py --iterations 20
 ```
 
 Note: This manual step is mainly for direct testing/debugging. In typical usage (Claude Code, Codex, Gemini CLI, etc.),
