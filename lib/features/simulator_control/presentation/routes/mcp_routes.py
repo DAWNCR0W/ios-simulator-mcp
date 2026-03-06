@@ -34,15 +34,6 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
-    def tap_coordinates(x: float, y: float) -> dict:
-        """Tap a UI element by absolute screen coordinates."""
-        try:
-            result = viewmodel.tap_coordinates(x, y)
-            return result.to_dict()
-        except Exception as error:
-            return Result.failure(str(error)).to_dict()
-
-    @mcp.tool()
     def input_text(identifier: str, text: str) -> dict:
         """Input text into a UI element by identifier or label."""
         try:
@@ -620,32 +611,6 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
     # =========================================================================
 
     @mcp.tool()
-    def swipe(
-        direction: str,
-        start_x: Optional[float] = None,
-        start_y: Optional[float] = None,
-        distance: float = 300.0,
-        duration: float = 0.3,
-    ) -> dict:
-        """Perform a swipe gesture.
-
-        Args:
-            direction: 'up', 'down', 'left', or 'right'
-            start_x: Starting X coordinate (defaults to screen center)
-            start_y: Starting Y coordinate (defaults to screen center)
-            distance: Swipe distance in pixels (default: 300)
-            duration: Swipe duration in seconds (default: 0.3)
-
-        Returns:
-            Success or failure result
-        """
-        try:
-            result = viewmodel.swipe(direction, start_x, start_y, distance, duration)
-            return result.to_dict()
-        except Exception as error:
-            return Result.failure(str(error)).to_dict()
-
-    @mcp.tool()
     def scroll_to_element(
         identifier: str,
         max_scrolls: int = 10,
@@ -680,24 +645,6 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
         """
         try:
             result = viewmodel.long_press(identifier, duration)
-            return result.to_dict()
-        except Exception as error:
-            return Result.failure(str(error)).to_dict()
-
-    @mcp.tool()
-    def long_press_coordinates(x: float, y: float, duration: float = 1.0) -> dict:
-        """Perform a long press at specific coordinates.
-
-        Args:
-            x: X coordinate
-            y: Y coordinate
-            duration: Press duration in seconds (default: 1.0)
-
-        Returns:
-            Success or failure result
-        """
-        try:
-            result = viewmodel.long_press_coordinates(x, y, duration)
             return result.to_dict()
         except Exception as error:
             return Result.failure(str(error)).to_dict()

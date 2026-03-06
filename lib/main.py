@@ -50,9 +50,6 @@ from lib.features.simulator_control.domain.usecases.stop_app_usecase import (
 from lib.features.simulator_control.domain.usecases.tap_element_usecase import (
     TapElementUsecase,
 )
-from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase import (
-    TapCoordinatesUsecase,
-)
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
 )
@@ -140,17 +137,11 @@ from lib.features.simulator_control.domain.usecases.get_element_count_usecase im
 )
 
 # Gesture use cases
-from lib.features.simulator_control.domain.usecases.swipe_usecase import (
-    SwipeUsecase,
-)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
-)
-from lib.features.simulator_control.domain.usecases.long_press_coordinates_usecase import (
-    LongPressCoordinatesUsecase,
 )
 
 # Assertion use case
@@ -183,7 +174,6 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         # Core use cases
         list_ui_tree_usecase=ListUiTreeUsecase(repository),
         tap_element_usecase=TapElementUsecase(repository),
-        tap_coordinates_usecase=TapCoordinatesUsecase(repository),
         input_text_usecase=InputTextUsecase(repository),
         launch_app_usecase=LaunchAppUsecase(repository),
         stop_app_usecase=StopAppUsecase(repository),
@@ -223,10 +213,8 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         get_element_attribute_usecase=GetElementAttributeUsecase(repository),
         get_element_count_usecase=GetElementCountUsecase(repository),
         # Gesture use cases
-        swipe_usecase=SwipeUsecase(repository),
         scroll_to_element_usecase=ScrollToElementUsecase(repository),
         long_press_usecase=LongPressUsecase(repository),
-        long_press_coordinates_usecase=LongPressCoordinatesUsecase(repository),
         # Assertion use case
         assertions_usecase=AssertionsUsecase(repository),
         # Retry use cases

@@ -23,10 +23,6 @@ class SimulatorRepository(ABC):
         """Tap an element by identifier or label."""
 
     @abstractmethod
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        """Tap absolute screen coordinates."""
-
-    @abstractmethod
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into a focused element."""
 
@@ -197,17 +193,6 @@ class SimulatorRepository(ABC):
     # =========================================================================
 
     @abstractmethod
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float],
-        start_y: Optional[float],
-        distance: float,
-        duration: float,
-    ) -> Result[None]:
-        """Perform a swipe gesture."""
-
-    @abstractmethod
     def scroll_to_element(
         self, identifier: str, max_scrolls: int, direction: str
     ) -> Result[dict]:
@@ -216,12 +201,6 @@ class SimulatorRepository(ABC):
     @abstractmethod
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         """Perform a long press on an element."""
-
-    @abstractmethod
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float
-    ) -> Result[None]:
-        """Perform a long press at coordinates."""
 
     # =========================================================================
     # ASSERTIONS
