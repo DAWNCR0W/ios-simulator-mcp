@@ -185,6 +185,10 @@ class SimulatorRepository(ABC):
         """Get a specific attribute from an element."""
 
     @abstractmethod
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        """Get supported accessibility actions from an element."""
+
+    @abstractmethod
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count elements matching the identifier."""
 

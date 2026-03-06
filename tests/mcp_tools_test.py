@@ -322,6 +322,25 @@ def test_element_state_and_attributes():
     _run_with_session(run)
 
 
+def test_get_element_actions():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("No element identifier available for get_element_actions.")
+
+        result = await _call_tool(
+            session,
+            "get_element_actions",
+            {"identifier": identifier},
+        )
+        assert result["success"] is True
+        assert isinstance(result.get("data"), list)
+        assert result["data"], "No actions returned"
+
+    _run_with_session(run)
+
+
 def test_find_elements():
     async def run(session):
         context = await _get_ui_context(session)

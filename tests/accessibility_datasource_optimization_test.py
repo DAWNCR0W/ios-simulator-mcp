@@ -76,6 +76,21 @@ def test_find_elements_returns_ranked_matches_with_limit(monkeypatch):
     assert result.data[0]["match_score"] > result.data[1]["match_score"]
 
 
+def test_get_element_actions_returns_sorted_action_names(monkeypatch):
+    target = object()
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=object()))
+
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
+    monkeypatch.setattr(datasource, "_find_element", lambda *_args: target)
+    monkeypatch.setattr(datasource, "_get_actions", lambda _element: {"AXShowMenu", "AXPress"})
+
+    result = datasource.get_element_actions("Login")
+
+    assert result.is_success is True
+    assert result.data == ["AXPress", "AXShowMenu"]
+
+
 def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     app = object()
     window = object()
