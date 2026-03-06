@@ -1,10 +1,9 @@
-Release 1.2.2
+Release 1.3.0
 
-- Fixed `list_installed_apps` parsing for modern `simctl listapps` output by supporting OpenStep plist payloads.
-- Replaced invalid `simctl push/pull` usage with reliable simulator data-path copy for `push_file` and `pull_file`.
-- Normalized `file://` paths and group-container values returned by installed app metadata.
-- Made `reset_app` resilient when the app is already stopped (`found nothing to terminate`), then proceeds with uninstall.
-- Added bounded timeout handling for `handle_permission_alert` to prevent long stalls on complex permission dialogs.
-- Capped alert-tree traversal depth for alert/button discovery paths to keep permission handling responsive.
-- Added regression tests for listapps parsing, file roundtrip behavior, simulator path validation, and reset idempotency.
-- Added additional alert fallback behavior tests for non-standard permission dialog accessibility trees.
+- Removed coordinate-based interaction tools from the MCP surface to keep automation element-driven and avoid host mouse or focus dependencies.
+- Added `find_elements(query, max_results)` to return ranked accessibility matches without traversing the full UI tree client-side.
+- Added `get_element_actions(identifier)` so clients can inspect supported accessibility actions before interacting with an element.
+- Added `wait_for_any_element(identifiers, timeout)` to proceed as soon as the first matching element appears.
+- Added `double_tap(identifier, interval)` with bounded AXPress execution to prevent hangs when accessibility stalls.
+- Added `app_info(bundle_id, device_id)` to expose normalized `simctl appinfo` metadata for installed simulator apps.
+- Expanded datasource, use case, and MCP integration coverage for the new tools and release surface.
