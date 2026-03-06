@@ -36,6 +36,46 @@ def test_accessibility_permission_check_is_cached(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_find_elements_returns_ranked_matches_with_limit(monkeypatch):
+    root = object()
+    best = object()
+    second = object()
+    ignored = object()
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=root))
+
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
+    monkeypatch.setattr(
+        datasource,
+        "_get_children",
+        lambda element: [best, second, ignored] if element is root else [],
+    )
+    monkeypatch.setattr(datasource, "_get_role", lambda _element: "AXButton")
+    monkeypatch.setattr(datasource, "_get_identifier", lambda element: {
+        best: "login_button",
+        second: None,
+        ignored: None,
+    }.get(element))
+    monkeypatch.setattr(datasource, "_get_label", lambda element: {
+        best: "Login",
+        second: "Login later",
+        ignored: "Cancel",
+    }.get(element))
+    monkeypatch.setattr(datasource, "_get_title", lambda _element: None)
+    monkeypatch.setattr(datasource, "_get_value", lambda _element: None)
+    monkeypatch.setattr(datasource, "_get_frame", lambda element: {
+        best: (0.0, 0.0, 40.0, 20.0),
+        second: (0.0, 0.0, 100.0, 30.0),
+        ignored: (0.0, 0.0, 120.0, 30.0),
+    }.get(element))
+
+    result = datasource.find_elements("Login", max_results=2)
+
+    assert result.is_success is True
+    assert [match["label"] for match in result.data] == ["Login", "Login later"]
+    assert result.data[0]["match_score"] > result.data[1]["match_score"]
+
+
 def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     app = object()
     window = object()

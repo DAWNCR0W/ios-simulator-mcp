@@ -124,6 +124,9 @@ from lib.features.simulator_control.domain.usecases.get_element_attribute_usecas
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
+from lib.features.simulator_control.domain.usecases.find_elements_usecase import (
+    FindElementsUsecase,
+)
 
 # Gesture use cases
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
@@ -193,6 +196,7 @@ class SimulatorMcpViewModel:
         get_element_text_usecase: GetElementTextUsecase,
         get_element_attribute_usecase: GetElementAttributeUsecase,
         get_element_count_usecase: GetElementCountUsecase,
+        find_elements_usecase: FindElementsUsecase,
         # Gesture use cases
         scroll_to_element_usecase: ScrollToElementUsecase,
         long_press_usecase: LongPressUsecase,
@@ -243,6 +247,7 @@ class SimulatorMcpViewModel:
         self._get_element_text_usecase = get_element_text_usecase
         self._get_element_attribute_usecase = get_element_attribute_usecase
         self._get_element_count_usecase = get_element_count_usecase
+        self._find_elements_usecase = find_elements_usecase
         # Gesture
         self._scroll_to_element_usecase = scroll_to_element_usecase
         self._long_press_usecase = long_press_usecase
@@ -439,6 +444,10 @@ class SimulatorMcpViewModel:
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count matching elements."""
         return self._get_element_count_usecase.execute(identifier)
+
+    def find_elements(self, query: str, max_results: int = 10) -> Result[list[dict]]:
+        """Find elements matching a query."""
+        return self._find_elements_usecase.execute(query, max_results)
 
     # =========================================================================
     # GESTURE SUPPORT

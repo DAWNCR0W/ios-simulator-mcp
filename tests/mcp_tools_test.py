@@ -322,6 +322,34 @@ def test_element_state_and_attributes():
     _run_with_session(run)
 
 
+def test_find_elements():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("No element identifier available for find_elements.")
+
+        result = await _call_tool(
+            session,
+            "find_elements",
+            {"query": identifier, "max_results": 5},
+        )
+        assert result["success"] is True
+        assert isinstance(result.get("data"), list)
+        assert result["data"], "No matches returned"
+        assert any(
+            identifier in {
+                match.get("identifier"),
+                match.get("label"),
+                match.get("title"),
+                match.get("value"),
+            }
+            for match in result["data"]
+        )
+
+    _run_with_session(run)
+
+
 def test_scroll_and_long_press():
     async def run(session):
         context = await _get_ui_context(session)
