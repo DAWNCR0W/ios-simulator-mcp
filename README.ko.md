@@ -219,6 +219,7 @@ args = ["--transport", "stdio"]
 ### Wait Utilities
 
 - `wait_for_element(identifier: str, timeout: float = 10.0)`
+- `wait_for_any_element(identifiers: list[str], timeout: float = 10.0)`
 - `wait_for_element_gone(identifier: str, timeout: float = 10.0)`
 - `wait_for_text(text: str, timeout: float = 10.0)`
 
