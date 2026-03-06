@@ -135,6 +135,9 @@ from lib.features.simulator_control.domain.usecases.get_element_attribute_usecas
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
+from lib.features.simulator_control.domain.usecases.find_elements_usecase import (
+    FindElementsUsecase,
+)
 
 # Gesture use cases
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
@@ -212,6 +215,7 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         get_element_text_usecase=GetElementTextUsecase(repository),
         get_element_attribute_usecase=GetElementAttributeUsecase(repository),
         get_element_count_usecase=GetElementCountUsecase(repository),
+        find_elements_usecase=FindElementsUsecase(repository),
         # Gesture use cases
         scroll_to_element_usecase=ScrollToElementUsecase(repository),
         long_press_usecase=LongPressUsecase(repository),

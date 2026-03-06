@@ -169,6 +169,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def get_element_count(self, identifier: str) -> Result[int]:
         return self._accessibility_datasource.get_element_count(identifier)
 
+    def find_elements(self, query: str, max_results: int) -> Result[list[dict]]:
+        return self._accessibility_datasource.find_elements(query, max_results)
+
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================

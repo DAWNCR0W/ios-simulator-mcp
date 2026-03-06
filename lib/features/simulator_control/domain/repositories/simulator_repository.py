@@ -188,6 +188,10 @@ class SimulatorRepository(ABC):
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count elements matching the identifier."""
 
+    @abstractmethod
+    def find_elements(self, query: str, max_results: int) -> Result[list[dict]]:
+        """Find elements matching a query."""
+
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================

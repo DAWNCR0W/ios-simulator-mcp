@@ -122,6 +122,9 @@ from lib.features.simulator_control.domain.usecases.get_element_attribute_usecas
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
+from lib.features.simulator_control.domain.usecases.find_elements_usecase import (
+    FindElementsUsecase,
+)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
@@ -388,6 +391,24 @@ class FakeSimulatorRepository(SimulatorRepository):
     def get_element_count(self, identifier: str) -> Result[int]:
         self.last_identifier = identifier
         return Result.success(data=1, message="Count")
+
+    def find_elements(self, query: str, max_results: int) -> Result[list[dict]]:
+        self.last_identifier = query
+        self.last_expected_count = max_results
+        return Result.success(
+            data=[
+                {
+                    "role": "AXButton",
+                    "identifier": "login_button",
+                    "label": "Login",
+                    "title": None,
+                    "value": None,
+                    "frame": None,
+                    "match_score": 120,
+                }
+            ],
+            message="Matches",
+        )
 
     def scroll_to_element(
         self, identifier: str, max_scrolls: int, direction: str
@@ -858,6 +879,18 @@ def test_get_element_count_usecase_passes_identifier() -> None:
     assert result.is_success is True
     assert repository.last_identifier == "Login"
     assert result.data == 1
+
+
+def test_find_elements_usecase_passes_query_and_limit() -> None:
+    repository = FakeSimulatorRepository()
+    usecase = FindElementsUsecase(repository)
+
+    result = usecase.execute("Login", 5)
+
+    assert result.is_success is True
+    assert repository.last_identifier == "Login"
+    assert repository.last_expected_count == 5
+    assert result.data[0]["identifier"] == "login_button"
 
 
 def test_scroll_to_element_usecase_passes_identifier() -> None:

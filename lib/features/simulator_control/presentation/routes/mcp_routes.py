@@ -606,6 +606,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
         except Exception as error:
             return Result.failure(str(error)).to_dict()
 
+    @mcp.tool()
+    def find_elements(query: str, max_results: int = 10) -> dict:
+        """Find elements matching a query.
+
+        Args:
+            query: Identifier, label, title, or value text to search for
+            max_results: Maximum number of matches to return
+
+        Returns:
+            Matching element metadata ordered by relevance
+        """
+        try:
+            result = viewmodel.find_elements(query, max_results)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================

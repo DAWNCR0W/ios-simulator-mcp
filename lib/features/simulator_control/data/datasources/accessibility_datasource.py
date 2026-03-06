@@ -288,6 +288,75 @@ class AccessibilityDatasource:
             queue.extend(children)
         return best_match
 
+    def find_elements(self, query: str, max_results: int = 10) -> Result[list[dict]]:
+        """Find elements matching a query."""
+        self._ensure_accessibility_permission()
+        self._reset_caches()
+        normalized_query = query.strip()
+        if not normalized_query:
+            return Result.failure("query must not be empty")
+        if max_results < 1:
+            return Result.failure("max_results must be >= 1")
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            matches = self._find_matching_elements(
+                app_element,
+                window_element,
+                normalized_query.lower(),
+                max_results,
+            )
+            return Result.success(
+                data=[
+                    {
+                        **self._get_element_info(element),
+                        "match_score": score,
+                    }
+                    for score, element in matches
+                ],
+                message=f"Found {len(matches)} matching element(s)",
+            )
+        except Exception as error:
+            return Result.failure(str(error))
+
+    def _find_matching_elements(
+        self,
+        app_element,
+        root_element,
+        query_lower: str,
+        max_results: int,
+    ) -> list[tuple[int, object]]:
+        queue = deque([root_element])
+        visited = set()
+        matches = []
+
+        while queue:
+            current = queue.popleft()
+            element_key = id(current)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+
+            score = self._match_score(current, query_lower)
+            if score > 0:
+                matches.append((score, current))
+
+            children = self._get_children(current)
+            if not children and self._get_role(current) == "AXGroup":
+                frame = self._get_frame(current)
+                if frame is not None:
+                    children = self._grid_scan_children(app_element, current, frame)
+            queue.extend(children)
+
+        matches.sort(key=self._find_elements_sort_key)
+        return matches[:max_results]
+
+    def _find_elements_sort_key(self, item: tuple[int, object]) -> tuple[int, int, float]:
+        score, element = item
+        identifier = self._get_identifier(element)
+        frame = self._get_frame(element)
+        area = float("inf") if frame is None else frame[2] * frame[3]
+        return (-score, 0 if identifier else 1, area)
+
     def _match_score(self, element, identifier_lower: str) -> int:
         if not identifier_lower:
             return 0
