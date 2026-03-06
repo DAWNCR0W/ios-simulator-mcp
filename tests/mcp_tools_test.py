@@ -276,6 +276,24 @@ def test_wait_for_element_and_text():
     _run_with_session(run)
 
 
+def test_wait_for_any_element():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("No element identifier available for wait_for_any_element.")
+
+        result = await _call_tool(
+            session,
+            "wait_for_any_element",
+            {"identifiers": ["__mcp_missing_element__", identifier], "timeout": 3.0},
+        )
+        assert result["success"] is True
+        assert result["data"]["matched_identifier"] == identifier
+
+    _run_with_session(run)
+
+
 def test_wait_for_element_gone_timeout():
     async def run(session):
         result = await _call_tool(

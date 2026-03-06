@@ -101,6 +101,9 @@ from lib.features.simulator_control.domain.usecases.set_target_window_usecase im
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.wait_for_any_element_usecase import (
+    WaitForAnyElementUsecase,
+)
 from lib.features.simulator_control.domain.usecases.wait_for_element_gone_usecase import (
     WaitForElementGoneUsecase,
 )
@@ -364,6 +367,17 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_identifier = identifier
         self.last_timeout = timeout
         return Result.success(data={"identifier": identifier}, message="Found")
+
+    def wait_for_any_element(self, identifiers: list[str], timeout: float) -> Result[dict]:
+        self.last_identifier = "|".join(identifiers)
+        self.last_timeout = timeout
+        return Result.success(
+            data={
+                "matched_identifier": identifiers[0],
+                "element": {"identifier": identifiers[0]},
+            },
+            message="Found any",
+        )
 
     def wait_for_element_gone(self, identifier: str, timeout: float) -> Result[None]:
         self.last_identifier = identifier
@@ -813,6 +827,18 @@ def test_wait_for_element_usecase_passes_identifier() -> None:
     assert result.is_success is True
     assert repository.last_identifier == "Login"
     assert repository.last_timeout == 5.0
+
+
+def test_wait_for_any_element_usecase_passes_identifiers() -> None:
+    repository = FakeSimulatorRepository()
+    usecase = WaitForAnyElementUsecase(repository)
+
+    result = usecase.execute(["Login", "Continue"], 5.0)
+
+    assert result.is_success is True
+    assert repository.last_identifier == "Login|Continue"
+    assert repository.last_timeout == 5.0
+    assert result.data["matched_identifier"] == "Login"
 
 
 def test_wait_for_element_gone_usecase_passes_identifier() -> None:

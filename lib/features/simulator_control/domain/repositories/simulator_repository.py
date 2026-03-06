@@ -157,6 +157,10 @@ class SimulatorRepository(ABC):
         """Wait for an element to appear on screen."""
 
     @abstractmethod
+    def wait_for_any_element(self, identifiers: list[str], timeout: float) -> Result[dict]:
+        """Wait for any element in a set to appear on screen."""
+
+    @abstractmethod
     def wait_for_element_gone(self, identifier: str, timeout: float) -> Result[None]:
         """Wait for an element to disappear from screen."""
 

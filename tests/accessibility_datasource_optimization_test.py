@@ -91,6 +91,29 @@ def test_get_element_actions_returns_sorted_action_names(monkeypatch):
     assert result.data == ["AXPress", "AXShowMenu"]
 
 
+def test_wait_for_any_element_returns_first_match(monkeypatch):
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=object()))
+
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
+    monkeypatch.setattr(
+        datasource,
+        "_find_element",
+        lambda _app, _window, identifier: object() if identifier == "Login" else None,
+    )
+    monkeypatch.setattr(
+        datasource,
+        "_get_element_info",
+        lambda _element: {"identifier": "Login", "role": "AXButton"},
+    )
+
+    result = datasource.wait_for_any_element(["Missing", "Login"], timeout=0.1)
+
+    assert result.is_success is True
+    assert result.data["matched_identifier"] == "Login"
+    assert result.data["element"]["identifier"] == "Login"
+
+
 def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     app = object()
     window = object()

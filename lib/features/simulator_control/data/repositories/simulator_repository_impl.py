@@ -144,6 +144,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def wait_for_element(self, identifier: str, timeout: float) -> Result[dict]:
         return self._accessibility_datasource.wait_for_element(identifier, timeout)
 
+    def wait_for_any_element(self, identifiers: list[str], timeout: float) -> Result[dict]:
+        return self._accessibility_datasource.wait_for_any_element(identifiers, timeout)
+
     def wait_for_element_gone(self, identifier: str, timeout: float) -> Result[None]:
         return self._accessibility_datasource.wait_for_element_gone(identifier, timeout)
 
