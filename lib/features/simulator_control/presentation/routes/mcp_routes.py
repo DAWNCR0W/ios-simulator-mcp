@@ -164,6 +164,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def app_info(bundle_id: str, device_id: Optional[str] = None) -> dict:
+        """Get metadata for an installed app on the simulator.
+
+        Args:
+            bundle_id: App bundle identifier
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            App metadata
+        """
+        try:
+            result = viewmodel.app_info(bundle_id, device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def get_app_container(
         bundle_id: str,
         device_id: Optional[str] = None,

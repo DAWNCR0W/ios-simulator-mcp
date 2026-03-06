@@ -56,6 +56,9 @@ from lib.features.simulator_control.domain.usecases.erase_simulator_usecase impo
 from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
     GetAppContainerUsecase,
 )
+from lib.features.simulator_control.domain.usecases.app_info_usecase import (
+    AppInfoUsecase,
+)
 from lib.features.simulator_control.domain.usecases.push_file_usecase import (
     PushFileUsecase,
 )
@@ -276,6 +279,18 @@ class FakeSimulatorRepository(SimulatorRepository):
         return Result.success(
             data={"path": "/tmp/container", "bundle_id": bundle_id, "container_type": container_type},
             message="Container",
+        )
+
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        self.last_bundle_id = bundle_id
+        self.last_device_id = device_id
+        return Result.success(
+            data={
+                "bundle_id": bundle_id,
+                "bundle_name": "Settings",
+                "bundle_path": "/Applications/Preferences.app",
+            },
+            message="App info",
         )
 
     def push_file(
@@ -662,6 +677,18 @@ def test_get_app_container_usecase_passes_args() -> None:
     assert repository.last_bundle_id == "com.example.app"
     assert repository.last_device_id == "DEVICE"
     assert result.data.get("path") == "/tmp/container"
+
+
+def test_app_info_usecase_passes_args() -> None:
+    repository = FakeSimulatorRepository()
+    usecase = AppInfoUsecase(repository)
+
+    result = usecase.execute("com.apple.Preferences", "DEVICE")
+
+    assert result.is_success is True
+    assert repository.last_bundle_id == "com.apple.Preferences"
+    assert repository.last_device_id == "DEVICE"
+    assert result.data.get("bundle_name") == "Settings"
 
 
 def test_push_file_usecase_passes_args() -> None:

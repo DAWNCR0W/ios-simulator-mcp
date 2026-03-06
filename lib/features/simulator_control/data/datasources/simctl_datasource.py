@@ -175,6 +175,32 @@ class SimctlDatasource:
         except (json.JSONDecodeError, SimctlError) as error:
             return Result.failure(str(error))
 
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        """Return metadata for an installed simulator app."""
+        if not bundle_id.strip():
+            return Result.failure("Bundle ID must not be empty.")
+
+        try:
+            resolved_device = self._resolve_device_id(device_id)
+            output = self._run_simctl(["appinfo", resolved_device, bundle_id.strip()]).strip()
+            payload = self._parse_simctl_plist_payload(output, "appinfo")
+            normalized = dict(payload)
+            normalized["bundle_id"] = payload.get("CFBundleIdentifier") or bundle_id.strip()
+            normalized["bundle_name"] = (
+                payload.get("CFBundleDisplayName") or payload.get("CFBundleName")
+            )
+            normalized["bundle_path"] = self._normalize_file_url(
+                payload.get("Path") or payload.get("Bundle")
+            )
+            normalized["app_container"] = self._normalize_file_url(payload.get("AppContainer"))
+            normalized["data_container"] = self._normalize_file_url(payload.get("DataContainer"))
+            normalized["group_containers"] = self._normalize_group_containers(
+                payload.get("GroupContainers")
+            )
+            return Result.success(data=normalized, message="App info resolved")
+        except (json.JSONDecodeError, SimctlError) as error:
+            return Result.failure(str(error))
+
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
     ) -> Result[dict]:
@@ -525,17 +551,20 @@ class SimctlDatasource:
         raise SimctlError("Unexpected simctl listapps output format.")
 
     def _parse_listapps_payload(self, raw_output: str) -> dict:
+        return self._parse_simctl_plist_payload(raw_output, "listapps")
+
+    def _parse_simctl_plist_payload(self, raw_output: str, command_name: str) -> dict:
         if not raw_output:
             return {}
         try:
             parsed = json.loads(raw_output)
             if isinstance(parsed, dict):
                 return parsed
-            raise SimctlError("Unexpected simctl listapps output format.")
+            raise SimctlError(f"Unexpected simctl {command_name} output format.")
         except json.JSONDecodeError:
-            return self._convert_openstep_plist_to_json(raw_output)
+            return self._convert_openstep_plist_to_json(raw_output, command_name)
 
-    def _convert_openstep_plist_to_json(self, raw_output: str) -> dict:
+    def _convert_openstep_plist_to_json(self, raw_output: str, command_name: str) -> dict:
         command = ["plutil", "-convert", "json", "-o", "-", "-"]
         try:
             result = subprocess.run(
@@ -547,17 +576,17 @@ class SimctlDatasource:
                 check=False,
             )
         except subprocess.TimeoutExpired as error:
-            raise SimctlError("Timed out while parsing simctl listapps output.") from error
+            raise SimctlError(f"Timed out while parsing simctl {command_name} output.") from error
 
         if result.returncode != 0:
             stderr = (result.stderr or "").strip() or "plutil conversion failed"
-            raise SimctlError(f"Failed to parse simctl listapps output: {stderr}")
+            raise SimctlError(f"Failed to parse simctl {command_name} output: {stderr}")
         try:
             parsed = json.loads(result.stdout)
         except json.JSONDecodeError as error:
-            raise SimctlError("Failed to parse simctl listapps JSON payload.") from error
+            raise SimctlError(f"Failed to parse simctl {command_name} JSON payload.") from error
         if not isinstance(parsed, dict):
-            raise SimctlError("Unexpected simctl listapps payload type.")
+            raise SimctlError(f"Unexpected simctl {command_name} payload type.")
         return parsed
 
     def _normalize_file_url(self, path_value: Optional[str]) -> Optional[str]:
@@ -609,6 +638,7 @@ class SimctlDatasource:
         return args[0] in {
             "list",
             "listapps",
+            "appinfo",
             "get_app_container",
             "pbpaste",
         }

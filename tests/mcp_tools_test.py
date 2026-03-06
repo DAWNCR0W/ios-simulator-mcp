@@ -16,6 +16,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_BUNDLE_ID = os.getenv("IOS_SIM_TEST_APP_BUNDLE_ID", "com.apple.mobileslideshow")
 RESET_APP_BUNDLE_ID = os.getenv("IOS_SIM_RESET_APP_BUNDLE_ID")
+APP_INFO_BUNDLE_ID = os.getenv("IOS_SIM_APP_INFO_BUNDLE_ID", "com.apple.Preferences")
 
 
 class SkipTest(Exception):
@@ -160,6 +161,16 @@ def test_launch_and_stop_app():
         time.sleep(1.0)
         stop = await _call_tool(session, "stop_app", {"bundle_id": DEFAULT_APP_BUNDLE_ID})
         assert stop["success"] is True
+
+    _run_with_session(run)
+
+
+def test_app_info():
+    async def run(session):
+        result = await _call_tool(session, "app_info", {"bundle_id": APP_INFO_BUNDLE_ID})
+        assert result["success"] is True
+        assert result["data"]["bundle_id"] == APP_INFO_BUNDLE_ID
+        assert result["data"]["bundle_path"]
 
     _run_with_session(run)
 
