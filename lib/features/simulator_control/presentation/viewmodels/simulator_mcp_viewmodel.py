@@ -39,9 +39,6 @@ from lib.features.simulator_control.domain.usecases.stop_app_usecase import (
 from lib.features.simulator_control.domain.usecases.tap_element_usecase import (
     TapElementUsecase,
 )
-from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase import (
-    TapCoordinatesUsecase,
-)
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
 )
@@ -129,17 +126,11 @@ from lib.features.simulator_control.domain.usecases.get_element_count_usecase im
 )
 
 # Gesture use cases
-from lib.features.simulator_control.domain.usecases.swipe_usecase import (
-    SwipeUsecase,
-)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
-)
-from lib.features.simulator_control.domain.usecases.long_press_coordinates_usecase import (
-    LongPressCoordinatesUsecase,
 )
 
 # Assertion use case
@@ -164,7 +155,6 @@ class SimulatorMcpViewModel:
         # Core use cases
         list_ui_tree_usecase: ListUiTreeUsecase,
         tap_element_usecase: TapElementUsecase,
-        tap_coordinates_usecase: TapCoordinatesUsecase,
         input_text_usecase: InputTextUsecase,
         launch_app_usecase: LaunchAppUsecase,
         stop_app_usecase: StopAppUsecase,
@@ -204,10 +194,8 @@ class SimulatorMcpViewModel:
         get_element_attribute_usecase: GetElementAttributeUsecase,
         get_element_count_usecase: GetElementCountUsecase,
         # Gesture use cases
-        swipe_usecase: SwipeUsecase,
         scroll_to_element_usecase: ScrollToElementUsecase,
         long_press_usecase: LongPressUsecase,
-        long_press_coordinates_usecase: LongPressCoordinatesUsecase,
         # Assertion use case
         assertions_usecase: AssertionsUsecase,
         # Retry use cases
@@ -217,7 +205,6 @@ class SimulatorMcpViewModel:
         # Core
         self._list_ui_tree_usecase = list_ui_tree_usecase
         self._tap_element_usecase = tap_element_usecase
-        self._tap_coordinates_usecase = tap_coordinates_usecase
         self._input_text_usecase = input_text_usecase
         self._launch_app_usecase = launch_app_usecase
         self._stop_app_usecase = stop_app_usecase
@@ -257,10 +244,8 @@ class SimulatorMcpViewModel:
         self._get_element_attribute_usecase = get_element_attribute_usecase
         self._get_element_count_usecase = get_element_count_usecase
         # Gesture
-        self._swipe_usecase = swipe_usecase
         self._scroll_to_element_usecase = scroll_to_element_usecase
         self._long_press_usecase = long_press_usecase
-        self._long_press_coordinates_usecase = long_press_coordinates_usecase
         # Assertion
         self._assertions_usecase = assertions_usecase
         # Retry
@@ -278,10 +263,6 @@ class SimulatorMcpViewModel:
     def tap_element(self, identifier: str) -> Result[None]:
         """Tap an element by identifier or label."""
         return self._tap_element_usecase.execute(identifier)
-
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        """Tap an absolute screen coordinate."""
-        return self._tap_coordinates_usecase.execute(x, y)
 
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into an element."""
@@ -463,17 +444,6 @@ class SimulatorMcpViewModel:
     # GESTURE SUPPORT
     # =========================================================================
 
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float] = None,
-        start_y: Optional[float] = None,
-        distance: float = 300.0,
-        duration: float = 0.3,
-    ) -> Result[None]:
-        """Perform a swipe gesture."""
-        return self._swipe_usecase.execute(direction, start_x, start_y, distance, duration)
-
     def scroll_to_element(
         self,
         identifier: str,
@@ -486,12 +456,6 @@ class SimulatorMcpViewModel:
     def long_press(self, identifier: str, duration: float = 1.0) -> Result[None]:
         """Long press on an element."""
         return self._long_press_usecase.execute(identifier, duration)
-
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float = 1.0
-    ) -> Result[None]:
-        """Long press at coordinates."""
-        return self._long_press_coordinates_usecase.execute(x, y, duration)
 
     # =========================================================================
     # ASSERTIONS

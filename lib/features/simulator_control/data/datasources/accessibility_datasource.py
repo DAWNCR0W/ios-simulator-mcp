@@ -97,26 +97,6 @@ class AccessibilityDatasource:
             return Result.failure(f"Press action failed: {identifier}")
         return Result.success(message="Tapped element")
 
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        """Tap an absolute screen coordinate within the simulator window."""
-        self._ensure_accessibility_permission()
-        self._reset_caches()
-        app_element, window_element = self._process_datasource.get_simulator_window()
-        target = self._find_pressable_element_at_position(app_element, window_element, x, y)
-        if target is None:
-            if self._strict_actions:
-                return Result.failure(f"No pressable element found at coordinates ({x}, {y}).")
-            return Result.success(message="Tap skipped: no element found at coordinates.")
-        if not self._perform_press(target):
-            if self._strict_actions:
-                return Result.failure(
-                    f"AXPress not supported for element at coordinates ({x}, {y})."
-                )
-            return Result.success(
-                message="Tap skipped: AXPress not supported for element at coordinates."
-            )
-        return Result.success(message="Tapped coordinates via AXPress")
-
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into a UI element by identifier or label."""
         self._ensure_accessibility_permission()
@@ -159,14 +139,6 @@ class AccessibilityDatasource:
                     if self._tap_alert_by_keyboard(action_lower):
                         time.sleep(0.2)
                         continue
-                tapped_without_alert_role = self._tap_alert_by_coordinates(
-                    app_element,
-                    window_element,
-                    action_lower,
-                )
-                if tapped_without_alert_role:
-                    time.sleep(0.2)
-                    continue
                 if attempt == 0:
                     return Result.failure("No alert detected.")
                 return Result.success(message="Alert dismissed")
@@ -178,14 +150,6 @@ class AccessibilityDatasource:
                 selected = self._select_alert_button(buttons, action_lower)
                 if selected is not None:
                     tapped = self._perform_press(selected["element"])
-                if not tapped:
-                    tapped = self._tap_alert_by_coordinates(
-                        app_element, window_element, action_lower
-                    )
-            else:
-                tapped = self._tap_alert_by_coordinates(
-                    app_element, window_element, action_lower
-                )
 
             if not tapped:
                 return Result.failure("Failed to press alert button.")
@@ -641,45 +605,6 @@ class AccessibilityDatasource:
 
         return best_element
 
-    def _find_pressable_element_at_position(self, app_element, root_element, x: float, y: float):
-        try:
-            from Quartz import kAXPressAction
-        except ImportError:
-            from ApplicationServices import kAXPressAction
-
-        direct = self._element_at_position(app_element, x, y)
-        if direct is not None and kAXPressAction in self._get_actions(direct):
-            return direct
-
-        queue = deque([root_element])
-        visited = set()
-        best_element = None
-        best_area = None
-
-        while queue:
-            current = queue.popleft()
-            element_key = id(current)
-            if element_key in visited:
-                continue
-            visited.add(element_key)
-
-            frame = self._get_frame(current)
-            if frame is not None and not self._frame_contains(frame, x, y):
-                continue
-
-            actions = self._get_actions(current)
-            if kAXPressAction in actions and frame is not None:
-                area = frame[2] * frame[3]
-                if best_area is None or area < best_area:
-                    best_area = area
-                    best_element = current
-
-            children = self._get_children(current)
-            if children:
-                queue.extend(children)
-
-        return best_element
-
     def _perform_press(self, element) -> bool:
         try:
             from Quartz import AXUIElementPerformAction, kAXErrorSuccess, kAXPressAction
@@ -931,29 +856,6 @@ class AccessibilityDatasource:
             return framed[-1] if action == "allow" else framed[0]
         return buttons[0] if action == "allow" else buttons[-1]
 
-    def _tap_alert_by_coordinates(
-        self, app_element, window_element, action: str
-    ) -> bool:
-        content_frame = self._get_largest_group_frame(window_element)
-        if content_frame is None:
-            return False
-        x_ratios = [0.72, 0.78] if action == "allow" else [0.28, 0.22]
-        y_ratios = [0.62, 0.68, 0.72, 0.76]
-
-        for x_ratio in x_ratios:
-            for y_ratio in y_ratios:
-                x = content_frame[0] + content_frame[2] * x_ratio
-                y = content_frame[1] + content_frame[3] * y_ratio
-
-                target = self._find_pressable_element_at_position(
-                    app_element, window_element, x, y
-                )
-                if target is not None and self._perform_press(target):
-                    return True
-                time.sleep(0.05)
-
-        return False
-
     def _tap_alert_by_keyboard(self, action: str) -> bool:
         """Fallback for dialogs that expose no pressable AX button actions."""
         if action == "allow":
@@ -1005,27 +907,6 @@ class AccessibilityDatasource:
         except Exception as error:
             self._logger.debug("Keyboard fallback failed for key %s: %s", key_code, error)
             return False
-
-    def _get_largest_group_frame(
-        self, window_element
-    ) -> Optional[tuple[float, float, float, float]]:
-        queue = deque([window_element])
-        visited = set()
-        best = None
-        while queue:
-            element = queue.popleft()
-            element_key = id(element)
-            if element_key in visited:
-                continue
-            visited.add(element_key)
-            role = self._get_role(element)
-            frame = self._get_frame(element)
-            if role == "AXGroup" and frame:
-                if best is None or (frame[2] * frame[3]) > (best[2] * best[3]):
-                    best = frame
-            children = self._get_children(element)
-            queue.extend(children)
-        return best
 
     def _window_snapshot_signature(self, window_element) -> str:
         frame = self._get_frame(window_element)
@@ -1403,35 +1284,7 @@ class AccessibilityDatasource:
     # GESTURE SUPPORT
     # =========================================================================
 
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float] = None,
-        start_y: Optional[float] = None,
-        distance: float = 300.0,
-        duration: float = 0.3,
-    ) -> Result[None]:
-        """Perform a swipe gesture.
-
-        Args:
-            direction: 'up', 'down', 'left', or 'right'
-            start_x: Starting X coordinate (defaults to center)
-            start_y: Starting Y coordinate (defaults to center)
-            distance: Swipe distance in pixels
-            duration: Swipe duration in seconds
-
-        Returns:
-            Result indicating success or failure
-        """
-        self._ensure_accessibility_permission()
-        self._reset_caches()
-        try:
-            app_element, window_element = self._process_datasource.get_simulator_window()
-            return self._swipe_internal(app_element, window_element, direction, start_x, start_y)
-        except Exception as error:
-            return Result.failure(str(error))
-
-    def _swipe_internal(
+    def _perform_scroll(
         self,
         app_element,
         window_element,
@@ -1465,15 +1318,15 @@ class AccessibilityDatasource:
                 app_element, window_element, probe_x, probe_y, direction_lower
             )
             if target is not None and self._perform_scroll_action(target, direction_lower):
-                return Result.success(message=f"Swiped {direction} via AX scroll action")
+                return Result.success(message=f"Scrolled {direction} via AX scroll action")
 
         if self._perform_scroll_action(window_element, direction_lower):
-            return Result.success(message=f"Swiped {direction} via AX scroll action")
+            return Result.success(message=f"Scrolled {direction} via AX scroll action")
         if self._perform_scroll_action(app_element, direction_lower):
-            return Result.success(message=f"Swiped {direction} via AX scroll action")
+            return Result.success(message=f"Scrolled {direction} via AX scroll action")
         if self._strict_actions:
-            return Result.failure("No AX scroll actions available for swipe.")
-        return Result.success(message="Swipe skipped: no AX scroll actions available.")
+            return Result.failure("No AX scroll actions available.")
+        return Result.success(message="Scroll skipped: no AX scroll actions available.")
 
     def scroll_to_element(
         self,
@@ -1513,7 +1366,7 @@ class AccessibilityDatasource:
                     )
 
                 # Scroll in the specified direction
-                scroll_result = self._swipe_internal(
+                scroll_result = self._perform_scroll(
                     app_element,
                     window_element,
                     direction="up" if direction_lower == "down" else "down",
@@ -1558,44 +1411,6 @@ class AccessibilityDatasource:
                 )
             time.sleep(max(duration, 0.0))
             return Result.success(message=f"Long press simulated via AXPress: {identifier}")
-        except Exception as error:
-            return Result.failure(str(error))
-
-    def long_press_coordinates(
-        self,
-        x: float,
-        y: float,
-        duration: float = 1.0,
-    ) -> Result[None]:
-        """Perform a long press at specific coordinates.
-
-        Args:
-            x: X coordinate
-            y: Y coordinate
-            duration: Press duration in seconds
-
-        Returns:
-            Result indicating success or failure
-        """
-        self._ensure_accessibility_permission()
-        self._reset_caches()
-        try:
-            app_element, window_element = self._process_datasource.get_simulator_window()
-            target = self._find_pressable_element_at_position(app_element, window_element, x, y)
-            if target is None:
-                if self._strict_actions:
-                    return Result.failure(f"No element found for long press at ({x}, {y}).")
-                return Result.success(message="Long press skipped: no element at coordinates.")
-            if not self._perform_press(target):
-                if self._strict_actions:
-                    return Result.failure(
-                        f"AXPress not supported for long press at ({x}, {y})."
-                    )
-                return Result.success(
-                    message="Long press skipped: AXPress not supported at coordinates."
-                )
-            time.sleep(max(duration, 0.0))
-            return Result.success(message=f"Long press simulated via AXPress at ({x}, {y})")
         except Exception as error:
             return Result.failure(str(error))
 

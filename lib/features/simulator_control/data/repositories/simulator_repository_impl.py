@@ -35,9 +35,6 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def tap_element(self, identifier: str) -> Result[None]:
         return self._accessibility_datasource.tap_element(identifier)
 
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        return self._accessibility_datasource.tap_coordinates(x, y)
-
     def input_text(self, identifier: str, text: str) -> Result[None]:
         return self._accessibility_datasource.input_text(identifier, text)
 
@@ -176,18 +173,6 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     # GESTURE SUPPORT
     # =========================================================================
 
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float],
-        start_y: Optional[float],
-        distance: float,
-        duration: float,
-    ) -> Result[None]:
-        return self._accessibility_datasource.swipe(
-            direction, start_x, start_y, distance, duration
-        )
-
     def scroll_to_element(
         self, identifier: str, max_scrolls: int, direction: str
     ) -> Result[dict]:
@@ -197,11 +182,6 @@ class SimulatorRepositoryImpl(SimulatorRepository):
 
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         return self._accessibility_datasource.long_press(identifier, duration)
-
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float
-    ) -> Result[None]:
-        return self._accessibility_datasource.long_press_coordinates(x, y, duration)
 
     # =========================================================================
     # ASSERTIONS

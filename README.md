@@ -28,13 +28,13 @@
 
 **iOS Simulator MCP** is a Model Context Protocol (MCP) server that lets AI agents
 inspect and operate iOS Simulator UI via macOS Accessibility APIs. It supports
-UI tree inspection, element/coordinate interactions, app lifecycle via simctl,
-wait utilities, gestures, assertions, and screenshots.
+UI tree inspection, element interactions, app lifecycle via simctl,
+wait utilities, long-press and scroll helpers, assertions, and screenshots.
 
 ## Features
 
 - UI tree inspection (AX hierarchy)
-- Tap elements by identifier/label and tap by coordinates
+- Tap elements by identifier/label
 - Text input into fields
 - Launch/stop/reset apps (simctl)
 - Boot/shutdown simulators, install/uninstall apps, open URLs (simctl)
@@ -44,7 +44,7 @@ wait utilities, gestures, assertions, and screenshots.
 - Media automation (add media, screen recording)
 - Screenshot capture (simctl)
 - Permission alert handling (allow/deny)
-- Wait utilities, state checks, gestures, assertions, retry helpers
+- Wait utilities, state checks, scroll helpers, assertions, retry helpers
 - Target a specific Simulator window by title substring
 - STDIO and HTTP transport
 
@@ -72,8 +72,8 @@ These environment variables are optional, and can be used to tune latency and be
 - `IOS_SIM_ACCESSIBILITY_TRUST_CACHE_TTL_SECONDS` (default: `2.0`)
 - `IOS_SIM_STRICT_ACTIONS` (default: `false`)
 
-When `IOS_SIM_STRICT_ACTIONS=true`, coordinate and long-press actions fail explicitly instead
-of returning a skipped success when no pressable target exists.
+When `IOS_SIM_STRICT_ACTIONS=true`, accessibility-driven press and scroll actions fail
+explicitly instead of returning a skipped success when no actionable target exists.
 
 ## Installation
 
@@ -210,7 +210,6 @@ All tools return:
 
 - `list_ui_elements()`
 - `tap_element(identifier: str)`
-- `tap_coordinates(x: float, y: float)`
 - `input_text(identifier: str, text: str)`
 - `launch_app(bundle_id: str, device_id: str = None)`
 - `stop_app(bundle_id: str, device_id: str = None)`
@@ -258,10 +257,8 @@ All tools return:
 
 ### Gestures
 
-- `swipe(direction: str, start_x: float = None, start_y: float = None, distance: float = 200.0, duration: float = 0.2)`
 - `scroll_to_element(identifier: str, max_scrolls: int = 10, direction: str = "down")`
 - `long_press(identifier: str, duration: float = 1.0)`
-- `long_press_coordinates(x: float, y: float, duration: float = 1.0)`
 
 ### Assertions
 

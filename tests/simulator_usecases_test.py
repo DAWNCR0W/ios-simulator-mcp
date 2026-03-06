@@ -98,9 +98,6 @@ from lib.features.simulator_control.domain.usecases.handle_permission_alert_usec
 from lib.features.simulator_control.domain.usecases.set_target_window_usecase import (
     SetTargetWindowUsecase,
 )
-from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase import (
-    TapCoordinatesUsecase,
-)
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
@@ -125,17 +122,11 @@ from lib.features.simulator_control.domain.usecases.get_element_attribute_usecas
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
-from lib.features.simulator_control.domain.usecases.swipe_usecase import (
-    SwipeUsecase,
-)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
-)
-from lib.features.simulator_control.domain.usecases.long_press_coordinates_usecase import (
-    LongPressCoordinatesUsecase,
 )
 from lib.features.simulator_control.domain.usecases.assertions_usecase import (
     AssertionsUsecase,
@@ -161,7 +152,6 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_substring = None
         self.last_expected_count = None
         self.last_direction = None
-        self.last_coordinates = None
         self.last_duration = None
         self.last_timeout = None
         self.last_retries = None
@@ -198,10 +188,6 @@ class FakeSimulatorRepository(SimulatorRepository):
     def tap_element(self, identifier: str) -> Result[None]:
         self.last_identifier = identifier
         return Result.success(message="Tapped")
-
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        self.last_coordinates = (x, y)
-        return Result.success(message="Tapped coordinates")
 
     def input_text(self, identifier: str, text: str) -> Result[None]:
         self.last_identifier = identifier
@@ -403,19 +389,6 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_identifier = identifier
         return Result.success(data=1, message="Count")
 
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float],
-        start_y: Optional[float],
-        distance: float,
-        duration: float,
-    ) -> Result[None]:
-        self.last_direction = direction
-        self.last_coordinates = (start_x, start_y)
-        self.last_duration = duration
-        return Result.success(message="Swiped")
-
     def scroll_to_element(
         self, identifier: str, max_scrolls: int, direction: str
     ) -> Result[dict]:
@@ -427,13 +400,6 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_identifier = identifier
         self.last_duration = duration
         return Result.success(message="Long press")
-
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float
-    ) -> Result[None]:
-        self.last_coordinates = (x, y)
-        self.last_duration = duration
-        return Result.success(message="Long press coordinates")
 
     def assert_element_exists(self, identifier: str) -> Result[None]:
         self.last_identifier = identifier
@@ -808,16 +774,6 @@ def test_set_target_window_usecase_passes_title() -> None:
     assert repository.last_window_title == "iPhone 15 Pro"
 
 
-def test_tap_coordinates_usecase_passes_coordinates() -> None:
-    repository = FakeSimulatorRepository()
-    usecase = TapCoordinatesUsecase(repository)
-
-    result = usecase.execute(10.0, 20.0)
-
-    assert result.is_success is True
-    assert repository.last_coordinates == (10.0, 20.0)
-
-
 def test_wait_for_element_usecase_passes_identifier() -> None:
     repository = FakeSimulatorRepository()
     usecase = WaitForElementUsecase(repository)
@@ -904,17 +860,6 @@ def test_get_element_count_usecase_passes_identifier() -> None:
     assert result.data == 1
 
 
-def test_swipe_usecase_passes_direction() -> None:
-    repository = FakeSimulatorRepository()
-    usecase = SwipeUsecase(repository)
-
-    result = usecase.execute("up", None, None, 200.0, 0.2)
-
-    assert result.is_success is True
-    assert repository.last_direction == "up"
-    assert repository.last_duration == 0.2
-
-
 def test_scroll_to_element_usecase_passes_identifier() -> None:
     repository = FakeSimulatorRepository()
     usecase = ScrollToElementUsecase(repository)
@@ -935,17 +880,6 @@ def test_long_press_usecase_passes_identifier() -> None:
     assert result.is_success is True
     assert repository.last_identifier == "Login"
     assert repository.last_duration == 1.5
-
-
-def test_long_press_coordinates_usecase_passes_coordinates() -> None:
-    repository = FakeSimulatorRepository()
-    usecase = LongPressCoordinatesUsecase(repository)
-
-    result = usecase.execute(12.0, 24.0, 1.2)
-
-    assert result.is_success is True
-    assert repository.last_coordinates == (12.0, 24.0)
-    assert repository.last_duration == 1.2
 
 
 def test_assertions_usecase_passes_identifier() -> None:
