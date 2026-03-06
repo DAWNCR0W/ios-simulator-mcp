@@ -101,6 +101,9 @@ from lib.features.simulator_control.domain.usecases.set_target_window_usecase im
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.wait_for_any_element_usecase import (
+    WaitForAnyElementUsecase,
+)
 from lib.features.simulator_control.domain.usecases.wait_for_element_gone_usecase import (
     WaitForElementGoneUsecase,
 )
@@ -191,6 +194,7 @@ class SimulatorMcpViewModel:
         set_target_window_usecase: SetTargetWindowUsecase,
         # Wait use cases
         wait_for_element_usecase: WaitForElementUsecase,
+        wait_for_any_element_usecase: WaitForAnyElementUsecase,
         wait_for_element_gone_usecase: WaitForElementGoneUsecase,
         wait_for_text_usecase: WaitForTextUsecase,
         # Element state use cases
@@ -243,6 +247,7 @@ class SimulatorMcpViewModel:
         self._set_target_window_usecase = set_target_window_usecase
         # Wait
         self._wait_for_element_usecase = wait_for_element_usecase
+        self._wait_for_any_element_usecase = wait_for_any_element_usecase
         self._wait_for_element_gone_usecase = wait_for_element_gone_usecase
         self._wait_for_text_usecase = wait_for_text_usecase
         # Element state
@@ -415,6 +420,12 @@ class SimulatorMcpViewModel:
     ) -> Result[dict]:
         """Wait for an element to appear."""
         return self._wait_for_element_usecase.execute(identifier, timeout)
+
+    def wait_for_any_element(
+        self, identifiers: list[str], timeout: float = 10.0
+    ) -> Result[dict]:
+        """Wait for any identifier in a set to appear."""
+        return self._wait_for_any_element_usecase.execute(identifiers, timeout)
 
     def wait_for_element_gone(
         self, identifier: str, timeout: float = 10.0

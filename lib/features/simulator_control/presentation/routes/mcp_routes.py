@@ -488,6 +488,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def wait_for_any_element(identifiers: list[str], timeout: float = 10.0) -> dict:
+        """Wait for any identifier in a set to appear on screen.
+
+        Args:
+            identifiers: Candidate identifiers, labels, or text values
+            timeout: Maximum time to wait in seconds (default: 10)
+
+        Returns:
+            Matched identifier and element info if found
+        """
+        try:
+            result = viewmodel.wait_for_any_element(identifiers, timeout)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def wait_for_element_gone(identifier: str, timeout: float = 10.0) -> dict:
         """Wait for an element to disappear from screen.
 

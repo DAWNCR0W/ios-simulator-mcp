@@ -1040,6 +1040,52 @@ class AccessibilityDatasource:
 
         return Result.failure(f"Timeout waiting for element: {identifier} (after {timeout}s)")
 
+    def wait_for_any_element(
+        self, identifiers: list[str], timeout: float = DEFAULT_TIMEOUT
+    ) -> Result[dict]:
+        """Wait for any identifier in a set to appear on screen."""
+        normalized_identifiers = [value.strip() for value in identifiers if value and value.strip()]
+        if not normalized_identifiers:
+            return Result.failure("identifiers must contain at least one non-empty value")
+
+        self._ensure_accessibility_permission()
+        start_time = time.monotonic()
+        deadline = start_time + max(timeout, 0.0)
+        poll_interval = self.DEFAULT_POLL_INTERVAL
+        last_signature = None
+        stable_iterations = 0
+
+        while time.monotonic() < deadline:
+            try:
+                self._reset_caches()
+                app_element, window_element = self._process_datasource.get_simulator_window()
+                for identifier in normalized_identifiers:
+                    element = self._find_element(app_element, window_element, identifier)
+                    if element is not None:
+                        return Result.success(
+                            data={
+                                "matched_identifier": identifier,
+                                "element": self._get_element_info(element),
+                            },
+                            message=f"Element found: {identifier}",
+                        )
+                signature = self._window_snapshot_signature(window_element)
+                if signature == last_signature:
+                    stable_iterations += 1
+                else:
+                    stable_iterations = 0
+                    last_signature = signature
+            except Exception as error:
+                self._logger.debug("Error during wait_for_any_element: %s", error)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(self._next_poll_interval(poll_interval, stable_iterations), remaining))
+
+        return Result.failure(
+            f"Timeout waiting for any element: {', '.join(normalized_identifiers)} (after {timeout}s)"
+        )
+
     def wait_for_element_gone(
         self, identifier: str, timeout: float = DEFAULT_TIMEOUT
     ) -> Result[None]:

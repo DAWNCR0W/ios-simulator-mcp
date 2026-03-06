@@ -112,6 +112,9 @@ from lib.features.simulator_control.domain.usecases.set_target_window_usecase im
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.wait_for_any_element_usecase import (
+    WaitForAnyElementUsecase,
+)
 from lib.features.simulator_control.domain.usecases.wait_for_element_gone_usecase import (
     WaitForElementGoneUsecase,
 )
@@ -210,6 +213,7 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         set_target_window_usecase=SetTargetWindowUsecase(repository),
         # Wait use cases
         wait_for_element_usecase=WaitForElementUsecase(repository),
+        wait_for_any_element_usecase=WaitForAnyElementUsecase(repository),
         wait_for_element_gone_usecase=WaitForElementGoneUsecase(repository),
         wait_for_text_usecase=WaitForTextUsecase(repository),
         # Element state use cases
