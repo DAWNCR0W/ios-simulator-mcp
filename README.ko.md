@@ -229,6 +229,7 @@ args = ["--transport", "stdio"]
 - `get_element_text(identifier: str)`
 - `get_element_attribute(identifier: str, attribute: str)`
 - `get_element_count(identifier: str)`
+- `find_elements(query: str, max_results: int = 10)`
 
 ### Gestures
 
