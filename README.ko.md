@@ -27,14 +27,14 @@
 ## 개요
 
 **iOS Simulator MCP**는 Model Context Protocol(MCP) 서버로, macOS 접근성 API를
-사용해 iOS Simulator UI를 읽고 조작합니다. UI 트리 조회, 요소/좌표 탭,
-텍스트 입력, simctl 기반 앱 제어, 대기 유틸리티, 제스처, 어설션,
+사용해 iOS Simulator UI를 읽고 조작합니다. UI 트리 조회, 요소 탭,
+텍스트 입력, simctl 기반 앱 제어, 대기 유틸리티, 롱프레스와 스크롤 헬퍼, 어설션,
 스크린샷 등을 제공합니다.
 
 ## 기능
 
 - UI 트리 조회(AX 계층)
-- 식별자/라벨 기반 탭 및 좌표 탭
+- 식별자/라벨 기반 탭
 - 텍스트 입력
 - 앱 실행/종료/리셋(simctl)
 - 시뮬레이터 부팅/종료, 앱 설치/제거, URL 열기(simctl)
@@ -44,7 +44,7 @@
 - 미디어 자동화(미디어 추가, 화면 녹화)
 - 스크린샷 캡처(simctl)
 - 권한 알림 처리(허용/거부)
-- 대기 유틸리티, 상태 체크, 제스처, 어설션, 재시도 헬퍼
+- 대기 유틸리티, 상태 체크, 스크롤 헬퍼, 어설션, 재시도 헬퍼
 - 제목 문자열로 특정 Simulator 창 지정
 - STDIO 및 HTTP 전송 방식 지원
 
@@ -185,7 +185,6 @@ args = ["--transport", "stdio"]
 
 - `list_ui_elements()`
 - `tap_element(identifier: str)`
-- `tap_coordinates(x: float, y: float)`
 - `input_text(identifier: str, text: str)`
 - `launch_app(bundle_id: str, device_id: str = None)`
 - `stop_app(bundle_id: str, device_id: str = None)`
@@ -198,6 +197,7 @@ args = ["--transport", "stdio"]
 - `delete_simulator(device_id: str)`
 - `erase_simulator(device_id: str = None, all_devices: bool = False)`
 - `list_installed_apps(device_id: str = None)`
+- `app_info(bundle_id: str, device_id: str = None)`
 - `get_app_container(bundle_id: str, device_id: str = None, container_type: str = None)`
 - `push_file(source_path: str, destination_path: str, device_id: str = None)`
 - `pull_file(source_path: str, destination_path: str, device_id: str = None)`
@@ -220,6 +220,7 @@ args = ["--transport", "stdio"]
 ### Wait Utilities
 
 - `wait_for_element(identifier: str, timeout: float = 10.0)`
+- `wait_for_any_element(identifiers: list[str], timeout: float = 10.0)`
 - `wait_for_element_gone(identifier: str, timeout: float = 10.0)`
 - `wait_for_text(text: str, timeout: float = 10.0)`
 
@@ -229,14 +230,15 @@ args = ["--transport", "stdio"]
 - `is_element_enabled(identifier: str)`
 - `get_element_text(identifier: str)`
 - `get_element_attribute(identifier: str, attribute: str)`
+- `get_element_actions(identifier: str)`
 - `get_element_count(identifier: str)`
+- `find_elements(query: str, max_results: int = 10)`
 
 ### Gestures
 
-- `swipe(direction: str, start_x: float = None, start_y: float = None, distance: float = 200.0, duration: float = 0.2)`
 - `scroll_to_element(identifier: str, max_scrolls: int = 10, direction: str = "down")`
+- `double_tap(identifier: str, interval: float = 0.1)`
 - `long_press(identifier: str, duration: float = 1.0)`
-- `long_press_coordinates(x: float, y: float, duration: float = 1.0)`
 
 ### Assertions
 

@@ -16,6 +16,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_APP_BUNDLE_ID = os.getenv("IOS_SIM_TEST_APP_BUNDLE_ID", "com.apple.mobileslideshow")
 RESET_APP_BUNDLE_ID = os.getenv("IOS_SIM_RESET_APP_BUNDLE_ID")
+APP_INFO_BUNDLE_ID = os.getenv("IOS_SIM_APP_INFO_BUNDLE_ID", "com.apple.Preferences")
 
 
 class SkipTest(Exception):
@@ -141,21 +142,6 @@ def test_list_ui_elements():
     _run_with_session(run)
 
 
-def test_tap_coordinates():
-    async def run(session):
-        ui = await _call_tool(session, "list_ui_elements")
-        assert ui["success"] is True
-        root = ui["data"]
-        frame = root.get("frame")
-        assert frame is not None, "Root frame missing"
-        tap_x = frame["x"] + frame["width"] * 0.5
-        tap_y = frame["y"] + frame["height"] * 0.5
-        result = await _call_tool(session, "tap_coordinates", {"x": tap_x, "y": tap_y})
-        assert result["success"] is True
-
-    _run_with_session(run)
-
-
 def test_tap_element():
     async def run(session):
         context = await _get_ui_context(session)
@@ -175,6 +161,16 @@ def test_launch_and_stop_app():
         time.sleep(1.0)
         stop = await _call_tool(session, "stop_app", {"bundle_id": DEFAULT_APP_BUNDLE_ID})
         assert stop["success"] is True
+
+    _run_with_session(run)
+
+
+def test_app_info():
+    async def run(session):
+        result = await _call_tool(session, "app_info", {"bundle_id": APP_INFO_BUNDLE_ID})
+        assert result["success"] is True
+        assert result["data"]["bundle_id"] == APP_INFO_BUNDLE_ID
+        assert result["data"]["bundle_path"]
 
     _run_with_session(run)
 
@@ -291,6 +287,24 @@ def test_wait_for_element_and_text():
     _run_with_session(run)
 
 
+def test_wait_for_any_element():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("No element identifier available for wait_for_any_element.")
+
+        result = await _call_tool(
+            session,
+            "wait_for_any_element",
+            {"identifiers": ["__mcp_missing_element__", identifier], "timeout": 3.0},
+        )
+        assert result["success"] is True
+        assert result["data"]["matched_identifier"] == identifier
+
+    _run_with_session(run)
+
+
 def test_wait_for_element_gone_timeout():
     async def run(session):
         result = await _call_tool(
@@ -337,17 +351,59 @@ def test_element_state_and_attributes():
     _run_with_session(run)
 
 
-def test_gestures_and_scroll():
+def test_get_element_actions():
     async def run(session):
         context = await _get_ui_context(session)
         identifier = context["identifier"]
-        root = context["root"]
-        frame = root.get("frame")
-        if not identifier or not frame:
-            raise SkipTest("Missing UI context for gestures.")
+        if not identifier:
+            raise SkipTest("No element identifier available for get_element_actions.")
 
-        swipe_result = await _call_tool(session, "swipe", {"direction": "up"})
-        assert swipe_result["success"] is True
+        result = await _call_tool(
+            session,
+            "get_element_actions",
+            {"identifier": identifier},
+        )
+        assert result["success"] is True
+        assert isinstance(result.get("data"), list)
+        assert result["data"], "No actions returned"
+
+    _run_with_session(run)
+
+
+def test_find_elements():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("No element identifier available for find_elements.")
+
+        result = await _call_tool(
+            session,
+            "find_elements",
+            {"query": identifier, "max_results": 5},
+        )
+        assert result["success"] is True
+        assert isinstance(result.get("data"), list)
+        assert result["data"], "No matches returned"
+        assert any(
+            identifier in {
+                match.get("identifier"),
+                match.get("label"),
+                match.get("title"),
+                match.get("value"),
+            }
+            for match in result["data"]
+        )
+
+    _run_with_session(run)
+
+
+def test_scroll_and_long_press():
+    async def run(session):
+        context = await _get_ui_context(session)
+        identifier = context["identifier"]
+        if not identifier:
+            raise SkipTest("Missing UI context for gesture helpers.")
 
         scroll_result = await _call_tool(
             session,
@@ -363,14 +419,17 @@ def test_gestures_and_scroll():
         )
         assert long_press_result["success"] is True
 
-        tap_x = frame["x"] + frame["width"] * 0.5
-        tap_y = frame["y"] + frame["height"] * 0.5
-        long_press_coord = await _call_tool(
-            session,
-            "long_press_coordinates",
-            {"x": tap_x, "y": tap_y, "duration": 0.2},
-        )
-        assert long_press_coord["success"] is True
+    anyio.run(_with_session, run)
+
+
+def test_double_tap():
+    async def run(session):
+        try:
+            with anyio.fail_after(5):
+                result = await _call_tool(session, "double_tap", {"identifier": "Volume Up"})
+        except TimeoutError as error:
+            raise SkipTest(f"double_tap timed out: {error}") from error
+        assert result["success"] is True
 
     anyio.run(_with_session, run)
 

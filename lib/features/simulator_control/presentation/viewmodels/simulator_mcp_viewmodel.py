@@ -39,9 +39,6 @@ from lib.features.simulator_control.domain.usecases.stop_app_usecase import (
 from lib.features.simulator_control.domain.usecases.tap_element_usecase import (
     TapElementUsecase,
 )
-from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase import (
-    TapCoordinatesUsecase,
-)
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
 )
@@ -56,6 +53,9 @@ from lib.features.simulator_control.domain.usecases.erase_simulator_usecase impo
 )
 from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
     GetAppContainerUsecase,
+)
+from lib.features.simulator_control.domain.usecases.app_info_usecase import (
+    AppInfoUsecase,
 )
 from lib.features.simulator_control.domain.usecases.push_file_usecase import (
     PushFileUsecase,
@@ -104,6 +104,9 @@ from lib.features.simulator_control.domain.usecases.set_target_window_usecase im
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.wait_for_any_element_usecase import (
+    WaitForAnyElementUsecase,
+)
 from lib.features.simulator_control.domain.usecases.wait_for_element_gone_usecase import (
     WaitForElementGoneUsecase,
 )
@@ -124,22 +127,25 @@ from lib.features.simulator_control.domain.usecases.get_element_text_usecase imp
 from lib.features.simulator_control.domain.usecases.get_element_attribute_usecase import (
     GetElementAttributeUsecase,
 )
+from lib.features.simulator_control.domain.usecases.get_element_actions_usecase import (
+    GetElementActionsUsecase,
+)
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
+from lib.features.simulator_control.domain.usecases.find_elements_usecase import (
+    FindElementsUsecase,
+)
 
 # Gesture use cases
-from lib.features.simulator_control.domain.usecases.swipe_usecase import (
-    SwipeUsecase,
-)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.double_tap_usecase import (
+    DoubleTapUsecase,
+)
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
-)
-from lib.features.simulator_control.domain.usecases.long_press_coordinates_usecase import (
-    LongPressCoordinatesUsecase,
 )
 
 # Assertion use case
@@ -164,7 +170,6 @@ class SimulatorMcpViewModel:
         # Core use cases
         list_ui_tree_usecase: ListUiTreeUsecase,
         tap_element_usecase: TapElementUsecase,
-        tap_coordinates_usecase: TapCoordinatesUsecase,
         input_text_usecase: InputTextUsecase,
         launch_app_usecase: LaunchAppUsecase,
         stop_app_usecase: StopAppUsecase,
@@ -177,6 +182,7 @@ class SimulatorMcpViewModel:
         delete_simulator_usecase: DeleteSimulatorUsecase,
         erase_simulator_usecase: EraseSimulatorUsecase,
         list_installed_apps_usecase: ListInstalledAppsUsecase,
+        app_info_usecase: AppInfoUsecase,
         get_app_container_usecase: GetAppContainerUsecase,
         push_file_usecase: PushFileUsecase,
         pull_file_usecase: PullFileUsecase,
@@ -195,6 +201,7 @@ class SimulatorMcpViewModel:
         set_target_window_usecase: SetTargetWindowUsecase,
         # Wait use cases
         wait_for_element_usecase: WaitForElementUsecase,
+        wait_for_any_element_usecase: WaitForAnyElementUsecase,
         wait_for_element_gone_usecase: WaitForElementGoneUsecase,
         wait_for_text_usecase: WaitForTextUsecase,
         # Element state use cases
@@ -202,12 +209,13 @@ class SimulatorMcpViewModel:
         is_element_enabled_usecase: IsElementEnabledUsecase,
         get_element_text_usecase: GetElementTextUsecase,
         get_element_attribute_usecase: GetElementAttributeUsecase,
+        get_element_actions_usecase: GetElementActionsUsecase,
         get_element_count_usecase: GetElementCountUsecase,
+        find_elements_usecase: FindElementsUsecase,
         # Gesture use cases
-        swipe_usecase: SwipeUsecase,
         scroll_to_element_usecase: ScrollToElementUsecase,
+        double_tap_usecase: DoubleTapUsecase,
         long_press_usecase: LongPressUsecase,
-        long_press_coordinates_usecase: LongPressCoordinatesUsecase,
         # Assertion use case
         assertions_usecase: AssertionsUsecase,
         # Retry use cases
@@ -217,7 +225,6 @@ class SimulatorMcpViewModel:
         # Core
         self._list_ui_tree_usecase = list_ui_tree_usecase
         self._tap_element_usecase = tap_element_usecase
-        self._tap_coordinates_usecase = tap_coordinates_usecase
         self._input_text_usecase = input_text_usecase
         self._launch_app_usecase = launch_app_usecase
         self._stop_app_usecase = stop_app_usecase
@@ -230,6 +237,7 @@ class SimulatorMcpViewModel:
         self._delete_simulator_usecase = delete_simulator_usecase
         self._erase_simulator_usecase = erase_simulator_usecase
         self._list_installed_apps_usecase = list_installed_apps_usecase
+        self._app_info_usecase = app_info_usecase
         self._get_app_container_usecase = get_app_container_usecase
         self._push_file_usecase = push_file_usecase
         self._pull_file_usecase = pull_file_usecase
@@ -248,6 +256,7 @@ class SimulatorMcpViewModel:
         self._set_target_window_usecase = set_target_window_usecase
         # Wait
         self._wait_for_element_usecase = wait_for_element_usecase
+        self._wait_for_any_element_usecase = wait_for_any_element_usecase
         self._wait_for_element_gone_usecase = wait_for_element_gone_usecase
         self._wait_for_text_usecase = wait_for_text_usecase
         # Element state
@@ -255,12 +264,13 @@ class SimulatorMcpViewModel:
         self._is_element_enabled_usecase = is_element_enabled_usecase
         self._get_element_text_usecase = get_element_text_usecase
         self._get_element_attribute_usecase = get_element_attribute_usecase
+        self._get_element_actions_usecase = get_element_actions_usecase
         self._get_element_count_usecase = get_element_count_usecase
+        self._find_elements_usecase = find_elements_usecase
         # Gesture
-        self._swipe_usecase = swipe_usecase
         self._scroll_to_element_usecase = scroll_to_element_usecase
+        self._double_tap_usecase = double_tap_usecase
         self._long_press_usecase = long_press_usecase
-        self._long_press_coordinates_usecase = long_press_coordinates_usecase
         # Assertion
         self._assertions_usecase = assertions_usecase
         # Retry
@@ -278,10 +288,6 @@ class SimulatorMcpViewModel:
     def tap_element(self, identifier: str) -> Result[None]:
         """Tap an element by identifier or label."""
         return self._tap_element_usecase.execute(identifier)
-
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        """Tap an absolute screen coordinate."""
-        return self._tap_coordinates_usecase.execute(x, y)
 
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into an element."""
@@ -334,6 +340,10 @@ class SimulatorMcpViewModel:
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         """List installed apps on the simulator."""
         return self._list_installed_apps_usecase.execute(device_id)
+
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        """Get metadata for an installed simulator app."""
+        return self._app_info_usecase.execute(bundle_id, device_id)
 
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
@@ -425,6 +435,12 @@ class SimulatorMcpViewModel:
         """Wait for an element to appear."""
         return self._wait_for_element_usecase.execute(identifier, timeout)
 
+    def wait_for_any_element(
+        self, identifiers: list[str], timeout: float = 10.0
+    ) -> Result[dict]:
+        """Wait for any identifier in a set to appear."""
+        return self._wait_for_any_element_usecase.execute(identifiers, timeout)
+
     def wait_for_element_gone(
         self, identifier: str, timeout: float = 10.0
     ) -> Result[None]:
@@ -455,24 +471,21 @@ class SimulatorMcpViewModel:
         """Get element attribute value."""
         return self._get_element_attribute_usecase.execute(identifier, attribute)
 
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        """Get supported accessibility actions."""
+        return self._get_element_actions_usecase.execute(identifier)
+
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count matching elements."""
         return self._get_element_count_usecase.execute(identifier)
 
+    def find_elements(self, query: str, max_results: int = 10) -> Result[list[dict]]:
+        """Find elements matching a query."""
+        return self._find_elements_usecase.execute(query, max_results)
+
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================
-
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float] = None,
-        start_y: Optional[float] = None,
-        distance: float = 300.0,
-        duration: float = 0.3,
-    ) -> Result[None]:
-        """Perform a swipe gesture."""
-        return self._swipe_usecase.execute(direction, start_x, start_y, distance, duration)
 
     def scroll_to_element(
         self,
@@ -483,15 +496,13 @@ class SimulatorMcpViewModel:
         """Scroll until element is visible."""
         return self._scroll_to_element_usecase.execute(identifier, max_scrolls, direction)
 
+    def double_tap(self, identifier: str, interval: float = 0.1) -> Result[None]:
+        """Double tap on an element."""
+        return self._double_tap_usecase.execute(identifier, interval)
+
     def long_press(self, identifier: str, duration: float = 1.0) -> Result[None]:
         """Long press on an element."""
         return self._long_press_usecase.execute(identifier, duration)
-
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float = 1.0
-    ) -> Result[None]:
-        """Long press at coordinates."""
-        return self._long_press_coordinates_usecase.execute(x, y, duration)
 
     # =========================================================================
     # ASSERTIONS

@@ -34,15 +34,6 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
-    def tap_coordinates(x: float, y: float) -> dict:
-        """Tap a UI element by absolute screen coordinates."""
-        try:
-            result = viewmodel.tap_coordinates(x, y)
-            return result.to_dict()
-        except Exception as error:
-            return Result.failure(str(error)).to_dict()
-
-    @mcp.tool()
     def input_text(identifier: str, text: str) -> dict:
         """Input text into a UI element by identifier or label."""
         try:
@@ -168,6 +159,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
         """
         try:
             result = viewmodel.list_installed_apps(device_id)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
+    def app_info(bundle_id: str, device_id: Optional[str] = None) -> dict:
+        """Get metadata for an installed app on the simulator.
+
+        Args:
+            bundle_id: App bundle identifier
+            device_id: Simulator UDID (optional)
+
+        Returns:
+            App metadata
+        """
+        try:
+            result = viewmodel.app_info(bundle_id, device_id)
             return result.to_dict()
         except Exception as error:
             return Result.failure(str(error)).to_dict()
@@ -497,6 +505,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def wait_for_any_element(identifiers: list[str], timeout: float = 10.0) -> dict:
+        """Wait for any identifier in a set to appear on screen.
+
+        Args:
+            identifiers: Candidate identifiers, labels, or text values
+            timeout: Maximum time to wait in seconds (default: 10)
+
+        Returns:
+            Matched identifier and element info if found
+        """
+        try:
+            result = viewmodel.wait_for_any_element(identifiers, timeout)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def wait_for_element_gone(identifier: str, timeout: float = 10.0) -> dict:
         """Wait for an element to disappear from screen.
 
@@ -600,6 +625,22 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def get_element_actions(identifier: str) -> dict:
+        """Get supported accessibility actions from an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Supported accessibility action names
+        """
+        try:
+            result = viewmodel.get_element_actions(identifier)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def get_element_count(identifier: str) -> dict:
         """Count elements matching the identifier.
 
@@ -615,35 +656,26 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
         except Exception as error:
             return Result.failure(str(error)).to_dict()
 
-    # =========================================================================
-    # GESTURE SUPPORT
-    # =========================================================================
-
     @mcp.tool()
-    def swipe(
-        direction: str,
-        start_x: Optional[float] = None,
-        start_y: Optional[float] = None,
-        distance: float = 300.0,
-        duration: float = 0.3,
-    ) -> dict:
-        """Perform a swipe gesture.
+    def find_elements(query: str, max_results: int = 10) -> dict:
+        """Find elements matching a query.
 
         Args:
-            direction: 'up', 'down', 'left', or 'right'
-            start_x: Starting X coordinate (defaults to screen center)
-            start_y: Starting Y coordinate (defaults to screen center)
-            distance: Swipe distance in pixels (default: 300)
-            duration: Swipe duration in seconds (default: 0.3)
+            query: Identifier, label, title, or value text to search for
+            max_results: Maximum number of matches to return
 
         Returns:
-            Success or failure result
+            Matching element metadata ordered by relevance
         """
         try:
-            result = viewmodel.swipe(direction, start_x, start_y, distance, duration)
+            result = viewmodel.find_elements(query, max_results)
             return result.to_dict()
         except Exception as error:
             return Result.failure(str(error)).to_dict()
+
+    # =========================================================================
+    # GESTURE SUPPORT
+    # =========================================================================
 
     @mcp.tool()
     def scroll_to_element(
@@ -668,6 +700,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def double_tap(identifier: str, interval: float = 0.1) -> dict:
+        """Perform a double tap on an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+            interval: Delay between taps in seconds (default: 0.1)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.double_tap(identifier, interval)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def long_press(identifier: str, duration: float = 1.0) -> dict:
         """Perform a long press on an element.
 
@@ -680,24 +729,6 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
         """
         try:
             result = viewmodel.long_press(identifier, duration)
-            return result.to_dict()
-        except Exception as error:
-            return Result.failure(str(error)).to_dict()
-
-    @mcp.tool()
-    def long_press_coordinates(x: float, y: float, duration: float = 1.0) -> dict:
-        """Perform a long press at specific coordinates.
-
-        Args:
-            x: X coordinate
-            y: Y coordinate
-            duration: Press duration in seconds (default: 1.0)
-
-        Returns:
-            Success or failure result
-        """
-        try:
-            result = viewmodel.long_press_coordinates(x, y, duration)
             return result.to_dict()
         except Exception as error:
             return Result.failure(str(error)).to_dict()

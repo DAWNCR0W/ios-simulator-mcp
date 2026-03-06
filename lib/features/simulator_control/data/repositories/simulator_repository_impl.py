@@ -35,9 +35,6 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def tap_element(self, identifier: str) -> Result[None]:
         return self._accessibility_datasource.tap_element(identifier)
 
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        return self._accessibility_datasource.tap_coordinates(x, y)
-
     def input_text(self, identifier: str, text: str) -> Result[None]:
         return self._accessibility_datasource.input_text(identifier, text)
 
@@ -77,6 +74,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
 
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         return self._simctl_datasource.list_installed_apps(device_id)
+
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.app_info(bundle_id, device_id)
 
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
@@ -147,6 +147,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def wait_for_element(self, identifier: str, timeout: float) -> Result[dict]:
         return self._accessibility_datasource.wait_for_element(identifier, timeout)
 
+    def wait_for_any_element(self, identifiers: list[str], timeout: float) -> Result[dict]:
+        return self._accessibility_datasource.wait_for_any_element(identifiers, timeout)
+
     def wait_for_element_gone(self, identifier: str, timeout: float) -> Result[None]:
         return self._accessibility_datasource.wait_for_element_gone(identifier, timeout)
 
@@ -169,24 +172,18 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def get_element_attribute(self, identifier: str, attribute: str) -> Result:
         return self._accessibility_datasource.get_element_attribute(identifier, attribute)
 
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        return self._accessibility_datasource.get_element_actions(identifier)
+
     def get_element_count(self, identifier: str) -> Result[int]:
         return self._accessibility_datasource.get_element_count(identifier)
+
+    def find_elements(self, query: str, max_results: int) -> Result[list[dict]]:
+        return self._accessibility_datasource.find_elements(query, max_results)
 
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================
-
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float],
-        start_y: Optional[float],
-        distance: float,
-        duration: float,
-    ) -> Result[None]:
-        return self._accessibility_datasource.swipe(
-            direction, start_x, start_y, distance, duration
-        )
 
     def scroll_to_element(
         self, identifier: str, max_scrolls: int, direction: str
@@ -195,13 +192,11 @@ class SimulatorRepositoryImpl(SimulatorRepository):
             identifier, max_scrolls, direction
         )
 
+    def double_tap(self, identifier: str, interval: float) -> Result[None]:
+        return self._accessibility_datasource.double_tap(identifier, interval)
+
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         return self._accessibility_datasource.long_press(identifier, duration)
-
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float
-    ) -> Result[None]:
-        return self._accessibility_datasource.long_press_coordinates(x, y, duration)
 
     # =========================================================================
     # ASSERTIONS

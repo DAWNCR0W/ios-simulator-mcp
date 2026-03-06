@@ -23,10 +23,6 @@ class SimulatorRepository(ABC):
         """Tap an element by identifier or label."""
 
     @abstractmethod
-    def tap_coordinates(self, x: float, y: float) -> Result[None]:
-        """Tap absolute screen coordinates."""
-
-    @abstractmethod
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into a focused element."""
 
@@ -77,6 +73,10 @@ class SimulatorRepository(ABC):
     @abstractmethod
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         """List installed apps on the simulator."""
+
+    @abstractmethod
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        """Get metadata for an installed simulator app."""
 
     @abstractmethod
     def get_app_container(
@@ -161,6 +161,10 @@ class SimulatorRepository(ABC):
         """Wait for an element to appear on screen."""
 
     @abstractmethod
+    def wait_for_any_element(self, identifiers: list[str], timeout: float) -> Result[dict]:
+        """Wait for any element in a set to appear on screen."""
+
+    @abstractmethod
     def wait_for_element_gone(self, identifier: str, timeout: float) -> Result[None]:
         """Wait for an element to disappear from screen."""
 
@@ -189,23 +193,20 @@ class SimulatorRepository(ABC):
         """Get a specific attribute from an element."""
 
     @abstractmethod
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        """Get supported accessibility actions from an element."""
+
+    @abstractmethod
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count elements matching the identifier."""
+
+    @abstractmethod
+    def find_elements(self, query: str, max_results: int) -> Result[list[dict]]:
+        """Find elements matching a query."""
 
     # =========================================================================
     # GESTURE SUPPORT
     # =========================================================================
-
-    @abstractmethod
-    def swipe(
-        self,
-        direction: str,
-        start_x: Optional[float],
-        start_y: Optional[float],
-        distance: float,
-        duration: float,
-    ) -> Result[None]:
-        """Perform a swipe gesture."""
 
     @abstractmethod
     def scroll_to_element(
@@ -214,14 +215,12 @@ class SimulatorRepository(ABC):
         """Scroll until an element becomes visible."""
 
     @abstractmethod
-    def long_press(self, identifier: str, duration: float) -> Result[None]:
-        """Perform a long press on an element."""
+    def double_tap(self, identifier: str, interval: float) -> Result[None]:
+        """Perform a double tap on an element."""
 
     @abstractmethod
-    def long_press_coordinates(
-        self, x: float, y: float, duration: float
-    ) -> Result[None]:
-        """Perform a long press at coordinates."""
+    def long_press(self, identifier: str, duration: float) -> Result[None]:
+        """Perform a long press on an element."""
 
     # =========================================================================
     # ASSERTIONS

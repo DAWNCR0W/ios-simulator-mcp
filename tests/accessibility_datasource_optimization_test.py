@@ -36,40 +36,82 @@ def test_accessibility_permission_check_is_cached(monkeypatch):
     assert calls["count"] == 1
 
 
-def test_tap_coordinates_strict_mode_returns_failure(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
-    datasource._strict_actions = True
+def test_find_elements_returns_ranked_matches_with_limit(monkeypatch):
+    root = object()
+    best = object()
+    second = object()
+    ignored = object()
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=root))
 
     monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
     monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
     monkeypatch.setattr(
         datasource,
-        "_find_pressable_element_at_position",
-        lambda _app, _window, _x, _y: None,
+        "_get_children",
+        lambda element: [best, second, ignored] if element is root else [],
     )
+    monkeypatch.setattr(datasource, "_get_role", lambda _element: "AXButton")
+    monkeypatch.setattr(datasource, "_get_identifier", lambda element: {
+        best: "login_button",
+        second: None,
+        ignored: None,
+    }.get(element))
+    monkeypatch.setattr(datasource, "_get_label", lambda element: {
+        best: "Login",
+        second: "Login later",
+        ignored: "Cancel",
+    }.get(element))
+    monkeypatch.setattr(datasource, "_get_title", lambda _element: None)
+    monkeypatch.setattr(datasource, "_get_value", lambda _element: None)
+    monkeypatch.setattr(datasource, "_get_frame", lambda element: {
+        best: (0.0, 0.0, 40.0, 20.0),
+        second: (0.0, 0.0, 100.0, 30.0),
+        ignored: (0.0, 0.0, 120.0, 30.0),
+    }.get(element))
 
-    result = datasource.tap_coordinates(10, 10)
+    result = datasource.find_elements("Login", max_results=2)
 
-    assert result.is_success is False
-    assert "No pressable element found" in result.message
+    assert result.is_success is True
+    assert [match["label"] for match in result.data] == ["Login", "Login later"]
+    assert result.data[0]["match_score"] > result.data[1]["match_score"]
 
 
-def test_tap_alert_by_coordinates_returns_false_without_pressable_targets(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
+def test_get_element_actions_returns_sorted_action_names(monkeypatch):
+    target = object()
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=object()))
 
-    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
+    monkeypatch.setattr(datasource, "_find_element", lambda *_args: target)
+    monkeypatch.setattr(datasource, "_get_actions", lambda _element: {"AXShowMenu", "AXPress"})
+
+    result = datasource.get_element_actions("Login")
+
+    assert result.is_success is True
+    assert result.data == ["AXPress", "AXShowMenu"]
+
+
+def test_wait_for_any_element_returns_first_match(monkeypatch):
+    datasource = AccessibilityDatasource(DummyProcessDatasource(app=object(), window=object()))
+
+    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
+    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
     monkeypatch.setattr(
-        datasource, "_get_largest_group_frame", lambda _window: (100.0, 200.0, 200.0, 100.0)
+        datasource,
+        "_find_element",
+        lambda _app, _window, identifier: object() if identifier == "Login" else None,
     )
     monkeypatch.setattr(
         datasource,
-        "_find_pressable_element_at_position",
-        lambda _app, _window, _x, _y: None,
+        "_get_element_info",
+        lambda _element: {"identifier": "Login", "role": "AXButton"},
     )
 
-    tapped = datasource._tap_alert_by_coordinates(object(), object(), "allow")
+    result = datasource.wait_for_any_element(["Missing", "Login"], timeout=0.1)
 
-    assert tapped is False
+    assert result.is_success is True
+    assert result.data["matched_identifier"] == "Login"
+    assert result.data["element"]["identifier"] == "Login"
 
 
 def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
@@ -101,44 +143,11 @@ def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     monkeypatch.setattr(datasource, "_find_buttons", lambda _root, _app, deadline=None: [button])
     monkeypatch.setattr(datasource, "_select_alert_button", lambda _buttons, _action: button)
     monkeypatch.setattr(datasource, "_perform_press", lambda _element: False)
-    monkeypatch.setattr(datasource, "_tap_alert_by_coordinates", lambda *_args: False)
 
     result = datasource.handle_permission_alert("allow")
 
     assert result.is_success is False
     assert "Failed to press alert button." in result.message
-
-
-def test_handle_permission_alert_taps_by_coordinates_when_alert_role_missing(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
-
-    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
-    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
-    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
-
-    calls = {"count": 0}
-
-    def fake_find_alert(_window, _app, deadline=None):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return None
-        return None
-
-    tapped = {"count": 0}
-
-    def fake_tap_by_coordinates(_app, _window, _action):
-        tapped["count"] += 1
-        return True
-
-    monkeypatch.setattr(datasource, "_find_alert_container", fake_find_alert)
-    monkeypatch.setattr(datasource, "_find_buttons_fast", lambda _window: [])
-    monkeypatch.setattr(datasource, "_filter_prompt_buttons", lambda _buttons, _window: [])
-    monkeypatch.setattr(datasource, "_tap_alert_by_coordinates", fake_tap_by_coordinates)
-
-    result = datasource.handle_permission_alert("allow")
-
-    assert result.is_success is True
-    assert tapped["count"] >= 1
 
 
 def test_handle_permission_alert_returns_timeout_failure(monkeypatch):

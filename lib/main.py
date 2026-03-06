@@ -50,9 +50,6 @@ from lib.features.simulator_control.domain.usecases.stop_app_usecase import (
 from lib.features.simulator_control.domain.usecases.tap_element_usecase import (
     TapElementUsecase,
 )
-from lib.features.simulator_control.domain.usecases.tap_coordinates_usecase import (
-    TapCoordinatesUsecase,
-)
 from lib.features.simulator_control.domain.usecases.take_screenshot_usecase import (
     TakeScreenshotUsecase,
 )
@@ -67,6 +64,9 @@ from lib.features.simulator_control.domain.usecases.erase_simulator_usecase impo
 )
 from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
     GetAppContainerUsecase,
+)
+from lib.features.simulator_control.domain.usecases.app_info_usecase import (
+    AppInfoUsecase,
 )
 from lib.features.simulator_control.domain.usecases.push_file_usecase import (
     PushFileUsecase,
@@ -115,6 +115,9 @@ from lib.features.simulator_control.domain.usecases.set_target_window_usecase im
 from lib.features.simulator_control.domain.usecases.wait_for_element_usecase import (
     WaitForElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.wait_for_any_element_usecase import (
+    WaitForAnyElementUsecase,
+)
 from lib.features.simulator_control.domain.usecases.wait_for_element_gone_usecase import (
     WaitForElementGoneUsecase,
 )
@@ -135,22 +138,25 @@ from lib.features.simulator_control.domain.usecases.get_element_text_usecase imp
 from lib.features.simulator_control.domain.usecases.get_element_attribute_usecase import (
     GetElementAttributeUsecase,
 )
+from lib.features.simulator_control.domain.usecases.get_element_actions_usecase import (
+    GetElementActionsUsecase,
+)
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
+from lib.features.simulator_control.domain.usecases.find_elements_usecase import (
+    FindElementsUsecase,
+)
 
 # Gesture use cases
-from lib.features.simulator_control.domain.usecases.swipe_usecase import (
-    SwipeUsecase,
-)
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.double_tap_usecase import (
+    DoubleTapUsecase,
+)
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
-)
-from lib.features.simulator_control.domain.usecases.long_press_coordinates_usecase import (
-    LongPressCoordinatesUsecase,
 )
 
 # Assertion use case
@@ -183,7 +189,6 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         # Core use cases
         list_ui_tree_usecase=ListUiTreeUsecase(repository),
         tap_element_usecase=TapElementUsecase(repository),
-        tap_coordinates_usecase=TapCoordinatesUsecase(repository),
         input_text_usecase=InputTextUsecase(repository),
         launch_app_usecase=LaunchAppUsecase(repository),
         stop_app_usecase=StopAppUsecase(repository),
@@ -196,6 +201,7 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         delete_simulator_usecase=DeleteSimulatorUsecase(repository),
         erase_simulator_usecase=EraseSimulatorUsecase(repository),
         list_installed_apps_usecase=ListInstalledAppsUsecase(repository),
+        app_info_usecase=AppInfoUsecase(repository),
         get_app_container_usecase=GetAppContainerUsecase(repository),
         push_file_usecase=PushFileUsecase(repository),
         pull_file_usecase=PullFileUsecase(repository),
@@ -214,6 +220,7 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         set_target_window_usecase=SetTargetWindowUsecase(repository),
         # Wait use cases
         wait_for_element_usecase=WaitForElementUsecase(repository),
+        wait_for_any_element_usecase=WaitForAnyElementUsecase(repository),
         wait_for_element_gone_usecase=WaitForElementGoneUsecase(repository),
         wait_for_text_usecase=WaitForTextUsecase(repository),
         # Element state use cases
@@ -221,12 +228,13 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         is_element_enabled_usecase=IsElementEnabledUsecase(repository),
         get_element_text_usecase=GetElementTextUsecase(repository),
         get_element_attribute_usecase=GetElementAttributeUsecase(repository),
+        get_element_actions_usecase=GetElementActionsUsecase(repository),
         get_element_count_usecase=GetElementCountUsecase(repository),
+        find_elements_usecase=FindElementsUsecase(repository),
         # Gesture use cases
-        swipe_usecase=SwipeUsecase(repository),
         scroll_to_element_usecase=ScrollToElementUsecase(repository),
+        double_tap_usecase=DoubleTapUsecase(repository),
         long_press_usecase=LongPressUsecase(repository),
-        long_press_coordinates_usecase=LongPressCoordinatesUsecase(repository),
         # Assertion use case
         assertions_usecase=AssertionsUsecase(repository),
         # Retry use cases

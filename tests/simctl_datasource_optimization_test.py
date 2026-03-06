@@ -158,6 +158,45 @@ def test_list_installed_apps_returns_failure_when_plutil_conversion_fails(monkey
     assert "Failed to parse simctl listapps output" in result.message
 
 
+def test_app_info_parses_openstep_output_via_plutil(monkeypatch):
+    datasource = SimctlDatasource()
+    monkeypatch.setattr(datasource, "_resolve_device_id", lambda _device_id: "BOOTED-1")
+    monkeypatch.setattr(
+        datasource,
+        "_run_simctl",
+        lambda _args: '{ CFBundleIdentifier = "com.apple.Preferences"; CFBundleDisplayName = Settings; Path = "file:///Applications/Preferences.app/"; }',
+    )
+
+    plutil_payload = {
+        "CFBundleIdentifier": "com.apple.Preferences",
+        "CFBundleDisplayName": "Settings",
+        "Path": "file:///Applications/Preferences.app/",
+    }
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            _args[0], 0, stdout=json.dumps(plutil_payload), stderr=""
+        ),
+    )
+
+    result = datasource.app_info("com.apple.Preferences", None)
+
+    assert result.is_success is True
+    assert result.data["bundle_id"] == "com.apple.Preferences"
+    assert result.data["bundle_name"] == "Settings"
+    assert result.data["bundle_path"] == "/Applications/Preferences.app"
+
+
+def test_app_info_rejects_empty_bundle_id():
+    datasource = SimctlDatasource()
+
+    result = datasource.app_info("   ", None)
+
+    assert result.is_success is False
+    assert result.message == "Bundle ID must not be empty."
+
+
 def test_push_file_copies_file_into_simulator_data_path(tmp_path, monkeypatch):
     datasource = SimctlDatasource()
     monkeypatch.setenv("HOME", str(tmp_path))
