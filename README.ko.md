@@ -197,6 +197,7 @@ args = ["--transport", "stdio"]
 - `delete_simulator(device_id: str)`
 - `erase_simulator(device_id: str = None, all_devices: bool = False)`
 - `list_installed_apps(device_id: str = None)`
+- `app_info(bundle_id: str, device_id: str = None)`
 - `get_app_container(bundle_id: str, device_id: str = None, container_type: str = None)`
 - `push_file(source_path: str, destination_path: str, device_id: str = None)`
 - `pull_file(source_path: str, destination_path: str, device_id: str = None)`

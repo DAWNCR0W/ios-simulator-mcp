@@ -65,6 +65,9 @@ from lib.features.simulator_control.domain.usecases.erase_simulator_usecase impo
 from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
     GetAppContainerUsecase,
 )
+from lib.features.simulator_control.domain.usecases.app_info_usecase import (
+    AppInfoUsecase,
+)
 from lib.features.simulator_control.domain.usecases.push_file_usecase import (
     PushFileUsecase,
 )
@@ -198,6 +201,7 @@ def build_viewmodel() -> SimulatorMcpViewModel:
         delete_simulator_usecase=DeleteSimulatorUsecase(repository),
         erase_simulator_usecase=EraseSimulatorUsecase(repository),
         list_installed_apps_usecase=ListInstalledAppsUsecase(repository),
+        app_info_usecase=AppInfoUsecase(repository),
         get_app_container_usecase=GetAppContainerUsecase(repository),
         push_file_usecase=PushFileUsecase(repository),
         pull_file_usecase=PullFileUsecase(repository),

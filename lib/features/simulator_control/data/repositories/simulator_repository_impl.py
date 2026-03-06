@@ -75,6 +75,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         return self._simctl_datasource.list_installed_apps(device_id)
 
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        return self._simctl_datasource.app_info(bundle_id, device_id)
+
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
     ) -> Result[dict]:

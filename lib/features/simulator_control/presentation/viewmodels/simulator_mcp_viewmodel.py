@@ -54,6 +54,9 @@ from lib.features.simulator_control.domain.usecases.erase_simulator_usecase impo
 from lib.features.simulator_control.domain.usecases.get_app_container_usecase import (
     GetAppContainerUsecase,
 )
+from lib.features.simulator_control.domain.usecases.app_info_usecase import (
+    AppInfoUsecase,
+)
 from lib.features.simulator_control.domain.usecases.push_file_usecase import (
     PushFileUsecase,
 )
@@ -179,6 +182,7 @@ class SimulatorMcpViewModel:
         delete_simulator_usecase: DeleteSimulatorUsecase,
         erase_simulator_usecase: EraseSimulatorUsecase,
         list_installed_apps_usecase: ListInstalledAppsUsecase,
+        app_info_usecase: AppInfoUsecase,
         get_app_container_usecase: GetAppContainerUsecase,
         push_file_usecase: PushFileUsecase,
         pull_file_usecase: PullFileUsecase,
@@ -233,6 +237,7 @@ class SimulatorMcpViewModel:
         self._delete_simulator_usecase = delete_simulator_usecase
         self._erase_simulator_usecase = erase_simulator_usecase
         self._list_installed_apps_usecase = list_installed_apps_usecase
+        self._app_info_usecase = app_info_usecase
         self._get_app_container_usecase = get_app_container_usecase
         self._push_file_usecase = push_file_usecase
         self._pull_file_usecase = pull_file_usecase
@@ -335,6 +340,10 @@ class SimulatorMcpViewModel:
     def list_installed_apps(self, device_id: Optional[str]) -> Result[list[dict]]:
         """List installed apps on the simulator."""
         return self._list_installed_apps_usecase.execute(device_id)
+
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        """Get metadata for an installed simulator app."""
+        return self._app_info_usecase.execute(bundle_id, device_id)
 
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]

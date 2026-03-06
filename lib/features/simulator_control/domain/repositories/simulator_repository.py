@@ -75,6 +75,10 @@ class SimulatorRepository(ABC):
         """List installed apps on the simulator."""
 
     @abstractmethod
+    def app_info(self, bundle_id: str, device_id: Optional[str]) -> Result[dict]:
+        """Get metadata for an installed simulator app."""
+
+    @abstractmethod
     def get_app_container(
         self, bundle_id: str, device_id: Optional[str], container_type: Optional[str]
     ) -> Result[dict]:
