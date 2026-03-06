@@ -591,6 +591,22 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def get_element_actions(identifier: str) -> dict:
+        """Get supported accessibility actions from an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+
+        Returns:
+            Supported accessibility action names
+        """
+        try:
+            result = viewmodel.get_element_actions(identifier)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def get_element_count(identifier: str) -> dict:
         """Count elements matching the identifier.
 

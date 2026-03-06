@@ -166,6 +166,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
     def get_element_attribute(self, identifier: str, attribute: str) -> Result:
         return self._accessibility_datasource.get_element_attribute(identifier, attribute)
 
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        return self._accessibility_datasource.get_element_actions(identifier)
+
     def get_element_count(self, identifier: str) -> Result[int]:
         return self._accessibility_datasource.get_element_count(identifier)
 

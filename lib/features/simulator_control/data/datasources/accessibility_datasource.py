@@ -1306,6 +1306,21 @@ class AccessibilityDatasource:
         except Exception as error:
             return Result.failure(str(error))
 
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        """Get supported accessibility actions from an element."""
+        self._ensure_accessibility_permission()
+        self._reset_caches()
+        try:
+            app_element, window_element = self._process_datasource.get_simulator_window()
+            element = self._find_element(app_element, window_element, identifier)
+            if element is None:
+                return Result.failure(f"Element not found: {identifier}")
+
+            actions = sorted(str(action) for action in self._get_actions(element))
+            return Result.success(data=actions, message=f"Found {len(actions)} action(s)")
+        except Exception as error:
+            return Result.failure(str(error))
+
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count elements matching the identifier.
 

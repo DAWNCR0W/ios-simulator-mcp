@@ -121,6 +121,9 @@ from lib.features.simulator_control.domain.usecases.get_element_text_usecase imp
 from lib.features.simulator_control.domain.usecases.get_element_attribute_usecase import (
     GetElementAttributeUsecase,
 )
+from lib.features.simulator_control.domain.usecases.get_element_actions_usecase import (
+    GetElementActionsUsecase,
+)
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
@@ -195,6 +198,7 @@ class SimulatorMcpViewModel:
         is_element_enabled_usecase: IsElementEnabledUsecase,
         get_element_text_usecase: GetElementTextUsecase,
         get_element_attribute_usecase: GetElementAttributeUsecase,
+        get_element_actions_usecase: GetElementActionsUsecase,
         get_element_count_usecase: GetElementCountUsecase,
         find_elements_usecase: FindElementsUsecase,
         # Gesture use cases
@@ -246,6 +250,7 @@ class SimulatorMcpViewModel:
         self._is_element_enabled_usecase = is_element_enabled_usecase
         self._get_element_text_usecase = get_element_text_usecase
         self._get_element_attribute_usecase = get_element_attribute_usecase
+        self._get_element_actions_usecase = get_element_actions_usecase
         self._get_element_count_usecase = get_element_count_usecase
         self._find_elements_usecase = find_elements_usecase
         # Gesture
@@ -440,6 +445,10 @@ class SimulatorMcpViewModel:
     def get_element_attribute(self, identifier: str, attribute: str) -> Result:
         """Get element attribute value."""
         return self._get_element_attribute_usecase.execute(identifier, attribute)
+
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        """Get supported accessibility actions."""
+        return self._get_element_actions_usecase.execute(identifier)
 
     def get_element_count(self, identifier: str) -> Result[int]:
         """Count matching elements."""

@@ -119,6 +119,9 @@ from lib.features.simulator_control.domain.usecases.get_element_text_usecase imp
 from lib.features.simulator_control.domain.usecases.get_element_attribute_usecase import (
     GetElementAttributeUsecase,
 )
+from lib.features.simulator_control.domain.usecases.get_element_actions_usecase import (
+    GetElementActionsUsecase,
+)
 from lib.features.simulator_control.domain.usecases.get_element_count_usecase import (
     GetElementCountUsecase,
 )
@@ -154,6 +157,7 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_expected = None
         self.last_substring = None
         self.last_expected_count = None
+        self.last_actions = None
         self.last_direction = None
         self.last_duration = None
         self.last_timeout = None
@@ -387,6 +391,11 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_identifier = identifier
         self.last_attribute = attribute
         return Result.success(data="AXRole", message="Attribute")
+
+    def get_element_actions(self, identifier: str) -> Result[list[str]]:
+        self.last_identifier = identifier
+        self.last_actions = ["AXPress", "AXShowMenu"]
+        return Result.success(data=self.last_actions, message="Actions")
 
     def get_element_count(self, identifier: str) -> Result[int]:
         self.last_identifier = identifier
@@ -868,6 +877,17 @@ def test_get_element_attribute_usecase_passes_identifier() -> None:
     assert result.is_success is True
     assert repository.last_identifier == "Login"
     assert repository.last_attribute == "AXRole"
+
+
+def test_get_element_actions_usecase_passes_identifier() -> None:
+    repository = FakeSimulatorRepository()
+    usecase = GetElementActionsUsecase(repository)
+
+    result = usecase.execute("Login")
+
+    assert result.is_success is True
+    assert repository.last_identifier == "Login"
+    assert result.data == ["AXPress", "AXShowMenu"]
 
 
 def test_get_element_count_usecase_passes_identifier() -> None:
