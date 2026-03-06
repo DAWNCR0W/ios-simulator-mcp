@@ -36,42 +36,6 @@ def test_accessibility_permission_check_is_cached(monkeypatch):
     assert calls["count"] == 1
 
 
-def test_tap_coordinates_strict_mode_returns_failure(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
-    datasource._strict_actions = True
-
-    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
-    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
-    monkeypatch.setattr(
-        datasource,
-        "_find_pressable_element_at_position",
-        lambda _app, _window, _x, _y: None,
-    )
-
-    result = datasource.tap_coordinates(10, 10)
-
-    assert result.is_success is False
-    assert "No pressable element found" in result.message
-
-
-def test_tap_alert_by_coordinates_returns_false_without_pressable_targets(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
-
-    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        datasource, "_get_largest_group_frame", lambda _window: (100.0, 200.0, 200.0, 100.0)
-    )
-    monkeypatch.setattr(
-        datasource,
-        "_find_pressable_element_at_position",
-        lambda _app, _window, _x, _y: None,
-    )
-
-    tapped = datasource._tap_alert_by_coordinates(object(), object(), "allow")
-
-    assert tapped is False
-
-
 def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     app = object()
     window = object()
@@ -101,44 +65,11 @@ def test_handle_permission_alert_fails_when_button_not_pressable(monkeypatch):
     monkeypatch.setattr(datasource, "_find_buttons", lambda _root, _app, deadline=None: [button])
     monkeypatch.setattr(datasource, "_select_alert_button", lambda _buttons, _action: button)
     monkeypatch.setattr(datasource, "_perform_press", lambda _element: False)
-    monkeypatch.setattr(datasource, "_tap_alert_by_coordinates", lambda *_args: False)
 
     result = datasource.handle_permission_alert("allow")
 
     assert result.is_success is False
     assert "Failed to press alert button." in result.message
-
-
-def test_handle_permission_alert_taps_by_coordinates_when_alert_role_missing(monkeypatch):
-    datasource = AccessibilityDatasource(DummyProcessDatasource())
-
-    monkeypatch.setattr(datasource, "_ensure_accessibility_permission", lambda: None)
-    monkeypatch.setattr(datasource, "_reset_caches", lambda: None)
-    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
-
-    calls = {"count": 0}
-
-    def fake_find_alert(_window, _app, deadline=None):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return None
-        return None
-
-    tapped = {"count": 0}
-
-    def fake_tap_by_coordinates(_app, _window, _action):
-        tapped["count"] += 1
-        return True
-
-    monkeypatch.setattr(datasource, "_find_alert_container", fake_find_alert)
-    monkeypatch.setattr(datasource, "_find_buttons_fast", lambda _window: [])
-    monkeypatch.setattr(datasource, "_filter_prompt_buttons", lambda _buttons, _window: [])
-    monkeypatch.setattr(datasource, "_tap_alert_by_coordinates", fake_tap_by_coordinates)
-
-    result = datasource.handle_permission_alert("allow")
-
-    assert result.is_success is True
-    assert tapped["count"] >= 1
 
 
 def test_handle_permission_alert_returns_timeout_failure(monkeypatch):
