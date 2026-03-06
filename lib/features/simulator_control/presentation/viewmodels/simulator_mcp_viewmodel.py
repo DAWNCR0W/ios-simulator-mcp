@@ -138,6 +138,9 @@ from lib.features.simulator_control.domain.usecases.find_elements_usecase import
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.double_tap_usecase import (
+    DoubleTapUsecase,
+)
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
 )
@@ -207,6 +210,7 @@ class SimulatorMcpViewModel:
         find_elements_usecase: FindElementsUsecase,
         # Gesture use cases
         scroll_to_element_usecase: ScrollToElementUsecase,
+        double_tap_usecase: DoubleTapUsecase,
         long_press_usecase: LongPressUsecase,
         # Assertion use case
         assertions_usecase: AssertionsUsecase,
@@ -260,6 +264,7 @@ class SimulatorMcpViewModel:
         self._find_elements_usecase = find_elements_usecase
         # Gesture
         self._scroll_to_element_usecase = scroll_to_element_usecase
+        self._double_tap_usecase = double_tap_usecase
         self._long_press_usecase = long_press_usecase
         # Assertion
         self._assertions_usecase = assertions_usecase
@@ -481,6 +486,10 @@ class SimulatorMcpViewModel:
     ) -> Result[dict]:
         """Scroll until element is visible."""
         return self._scroll_to_element_usecase.execute(identifier, max_scrolls, direction)
+
+    def double_tap(self, identifier: str, interval: float = 0.1) -> Result[None]:
+        """Double tap on an element."""
+        return self._double_tap_usecase.execute(identifier, interval)
 
     def long_press(self, identifier: str, duration: float = 1.0) -> Result[None]:
         """Long press on an element."""

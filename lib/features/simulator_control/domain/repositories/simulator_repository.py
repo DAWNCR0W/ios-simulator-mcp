@@ -211,6 +211,10 @@ class SimulatorRepository(ABC):
         """Scroll until an element becomes visible."""
 
     @abstractmethod
+    def double_tap(self, identifier: str, interval: float) -> Result[None]:
+        """Perform a double tap on an element."""
+
+    @abstractmethod
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         """Perform a long press on an element."""
 

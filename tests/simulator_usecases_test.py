@@ -134,6 +134,9 @@ from lib.features.simulator_control.domain.usecases.find_elements_usecase import
 from lib.features.simulator_control.domain.usecases.scroll_to_element_usecase import (
     ScrollToElementUsecase,
 )
+from lib.features.simulator_control.domain.usecases.double_tap_usecase import (
+    DoubleTapUsecase,
+)
 from lib.features.simulator_control.domain.usecases.long_press_usecase import (
     LongPressUsecase,
 )
@@ -439,6 +442,11 @@ class FakeSimulatorRepository(SimulatorRepository):
         self.last_identifier = identifier
         self.last_direction = direction
         return Result.success(data={"identifier": identifier}, message="Scrolled")
+
+    def double_tap(self, identifier: str, interval: float) -> Result[None]:
+        self.last_identifier = identifier
+        self.last_interval = interval
+        return Result.success(message="Double tapped")
 
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         self.last_identifier = identifier
@@ -948,6 +956,17 @@ def test_scroll_to_element_usecase_passes_identifier() -> None:
     assert result.is_success is True
     assert repository.last_identifier == "Target"
     assert repository.last_direction == "down"
+
+
+def test_double_tap_usecase_passes_identifier() -> None:
+    repository = FakeSimulatorRepository()
+    usecase = DoubleTapUsecase(repository)
+
+    result = usecase.execute("Login", 0.2)
+
+    assert result.is_success is True
+    assert repository.last_identifier == "Login"
+    assert repository.last_interval == 0.2
 
 
 def test_long_press_usecase_passes_identifier() -> None:
