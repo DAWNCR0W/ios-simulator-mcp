@@ -261,6 +261,7 @@ All tools return:
 ### Gestures
 
 - `scroll_to_element(identifier: str, max_scrolls: int = 10, direction: str = "down")`
+- `double_tap(identifier: str, interval: float = 0.1)`
 - `long_press(identifier: str, duration: float = 1.0)`
 
 ### Assertions

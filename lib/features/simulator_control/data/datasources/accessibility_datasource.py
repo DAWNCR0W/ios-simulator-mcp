@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import re
+import threading
 import time
 from collections import deque
 from typing import List, Optional
@@ -96,6 +97,38 @@ class AccessibilityDatasource:
         if not self._perform_press(target):
             return Result.failure(f"Press action failed: {identifier}")
         return Result.success(message="Tapped element")
+
+    def double_tap(self, identifier: str, interval: float = 0.1) -> Result[None]:
+        """Press a UI element twice by identifier or label."""
+        self._ensure_accessibility_permission()
+        self._reset_caches()
+        if interval < 0:
+            return Result.failure("interval must be >= 0")
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        target = self._find_element_shallow(window_element, identifier)
+        if target is None:
+            target = self._find_element(app_element, window_element, identifier)
+        if target is None:
+            return Result.failure(f"Element not found: {identifier}")
+        first_press = self._perform_press_with_timeout(target)
+        if not first_press.is_success:
+            return Result.failure(
+                f"First press action failed: {identifier} ({first_press.message})"
+            )
+        time.sleep(interval)
+        self._reset_caches()
+        app_element, window_element = self._process_datasource.get_simulator_window()
+        target = self._find_element_shallow(window_element, identifier)
+        if target is None:
+            target = self._find_element(app_element, window_element, identifier)
+        if target is None:
+            return Result.failure(f"Element not found for second tap: {identifier}")
+        second_press = self._perform_press_with_timeout(target)
+        if not second_press.is_success:
+            return Result.failure(
+                f"Second press action failed: {identifier} ({second_press.message})"
+            )
+        return Result.success(message="Double-tapped element")
 
     def input_text(self, identifier: str, text: str) -> Result[None]:
         """Input text into a UI element by identifier or label."""
@@ -286,6 +319,35 @@ class AccessibilityDatasource:
                 if frame is not None:
                     children = self._grid_scan_children(app_element, current, frame)
             queue.extend(children)
+        return best_match
+
+    def _find_element_shallow(self, root_element, identifier: str, max_depth: int = 2):
+        identifier_lower = identifier.lower().strip()
+        queue = deque([(root_element, 0)])
+        visited = set()
+        best_match = None
+        best_score = 0
+
+        while queue:
+            current, depth = queue.popleft()
+            element_key = id(current)
+            if element_key in visited:
+                continue
+            visited.add(element_key)
+
+            score = self._match_score(current, identifier_lower)
+            if score > best_score:
+                best_score = score
+                best_match = current
+            elif score > 0 and score == best_score and best_match is not None:
+                if self._is_better_match_candidate(current, best_match):
+                    best_match = current
+
+            if depth >= max_depth:
+                continue
+            for child in self._get_children(current):
+                queue.append((child, depth + 1))
+
         return best_match
 
     def find_elements(self, query: str, max_results: int = 10) -> Result[list[dict]]:
@@ -689,6 +751,29 @@ class AccessibilityDatasource:
             return False
         result = AXUIElementPerformAction(element, kAXPressAction)
         return result == kAXErrorSuccess
+
+    def _perform_press_with_timeout(self, element, timeout: float = 2.0) -> Result[None]:
+        result_holder: dict[str, object] = {}
+
+        def worker() -> None:
+            try:
+                result_holder["pressed"] = self._perform_press(element)
+            except Exception as error:
+                result_holder["error"] = error
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout)
+
+        if thread.is_alive():
+            return Result.failure("AXPress timed out")
+
+        error = result_holder.get("error")
+        if error is not None:
+            return Result.failure(str(error))
+        if result_holder.get("pressed") is not True:
+            return Result.failure("AXPress not supported")
+        return Result.success()
 
     def _perform_scroll_action(self, element, direction: str) -> bool:
         try:

@@ -683,6 +683,23 @@ def register_routes(mcp, viewmodel: SimulatorMcpViewModel) -> None:
             return Result.failure(str(error)).to_dict()
 
     @mcp.tool()
+    def double_tap(identifier: str, interval: float = 0.1) -> dict:
+        """Perform a double tap on an element.
+
+        Args:
+            identifier: Element identifier, label, or text
+            interval: Delay between taps in seconds (default: 0.1)
+
+        Returns:
+            Success or failure result
+        """
+        try:
+            result = viewmodel.double_tap(identifier, interval)
+            return result.to_dict()
+        except Exception as error:
+            return Result.failure(str(error)).to_dict()
+
+    @mcp.tool()
     def long_press(identifier: str, duration: float = 1.0) -> dict:
         """Perform a long press on an element.
 

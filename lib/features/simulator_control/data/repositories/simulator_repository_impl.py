@@ -189,6 +189,9 @@ class SimulatorRepositoryImpl(SimulatorRepository):
             identifier, max_scrolls, direction
         )
 
+    def double_tap(self, identifier: str, interval: float) -> Result[None]:
+        return self._accessibility_datasource.double_tap(identifier, interval)
+
     def long_press(self, identifier: str, duration: float) -> Result[None]:
         return self._accessibility_datasource.long_press(identifier, duration)
 

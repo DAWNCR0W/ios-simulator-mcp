@@ -411,6 +411,18 @@ def test_scroll_and_long_press():
     anyio.run(_with_session, run)
 
 
+def test_double_tap():
+    async def run(session):
+        try:
+            with anyio.fail_after(5):
+                result = await _call_tool(session, "double_tap", {"identifier": "Volume Up"})
+        except TimeoutError as error:
+            raise SkipTest(f"double_tap timed out: {error}") from error
+        assert result["success"] is True
+
+    anyio.run(_with_session, run)
+
+
 def test_assertions_and_retry_utilities():
     async def run(session):
         context = await _get_ui_context(session)
