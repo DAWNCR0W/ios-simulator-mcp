@@ -9,7 +9,7 @@ authors = [
   { name = "HanbitN Engineering" }
 ]
 dependencies = [
-  "mcp>=0.3.0",
+  "mcp>=1.27.0",
   "pyobjc>=10.0"
 ]
 
