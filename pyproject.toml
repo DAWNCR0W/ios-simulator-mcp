@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
   "mcp>=0.3.0",
-  "pyobjc>=10.0"
+  "pyobjc>=12.1"
 ]
 
 [project.scripts]
